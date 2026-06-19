@@ -70,6 +70,7 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
       <button onclick="switchTab('portfolio')" class="tab-button px-5 py-3 text-sm font-medium tab-inactive" data-tab="portfolio">📁 포트폴리오</button>
       <button onclick="switchTab('returns')" class="tab-button px-5 py-3 text-sm font-medium tab-inactive" data-tab="returns">📈 수익률</button>
       <button onclick="switchTab('dividends')" class="tab-button px-5 py-3 text-sm font-medium tab-inactive" data-tab="dividends">💵 배당금</button>
+      <button onclick="switchTab('trades')" class="tab-button px-5 py-3 text-sm font-medium tab-inactive" data-tab="trades">📋 당일 거래</button>
       <button onclick="switchTab('import')" class="tab-button px-5 py-3 text-sm font-medium tab-inactive" data-tab="import">📂 파일 불러오기</button>
       <button onclick="switchTab('settings')" class="tab-button px-5 py-3 text-sm font-medium tab-inactive" data-tab="settings">⚙️ 관리</button>
     </div>
@@ -237,6 +238,41 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
       <div class="mt-6">
         <h3 class="text-sm font-semibold mb-3">📈 월별 배당 추이</h3>
         <canvas id="divChart" height="200"></canvas>
+      </div>
+    </div>
+
+    <!-- TAB: TRADES (당일 거래) -->
+    <div id="trades" class="tab-content bg-white border border-t-0 border-[#E5E7EB] rounded-b-lg p-6 hidden">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-sm font-semibold">📋 당일 매수/매도 거래 내역</h2>
+        <span id="tradeCount" class="text-sm font-bold text-blue-600">0건</span>
+      </div>
+      <div class="scroll-table">
+        <table>
+          <thead><tr><th>날짜</th><th>시간</th><th>계좌</th><th>종목명</th><th class="text-right">거래유형</th><th class="text-right">수량</th><th class="text-right">단가</th><th class="text-right">거래금액</th></tr></thead>
+          <tbody id="tradeTableBody"></tbody>
+        </table>
+      </div>
+      <div class="mt-6">
+        <h3 class="text-sm font-semibold mb-3">📊 거래 요약</h3>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div class="bg-blue-50 rounded-lg border border-blue-200 p-3">
+            <p class="text-xs text-gray-500 font-medium">📥 총 매수금액</p>
+            <p id="totalBuyAmount" class="text-lg font-bold mt-1 text-blue-600">₩0</p>
+          </div>
+          <div class="bg-red-50 rounded-lg border border-red-200 p-3">
+            <p class="text-xs text-gray-500 font-medium">📤 총 매도금액</p>
+            <p id="totalSellAmount" class="text-lg font-bold mt-1 text-red-600">₩0</p>
+          </div>
+          <div class="bg-green-50 rounded-lg border border-green-200 p-3">
+            <p class="text-xs text-gray-500 font-medium">🔄 순 거래금액</p>
+            <p id="netTradeAmount" class="text-lg font-bold mt-1 text-green-600">₩0</p>
+          </div>
+          <div class="bg-purple-50 rounded-lg border border-purple-200 p-3">
+            <p class="text-xs text-gray-500 font-medium">📊 거래 건수</p>
+            <p id="tradeTotalCount" class="text-lg font-bold mt-1 text-purple-600">0건</p>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -976,18 +1012,32 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
         // 퇴직연금 배당 (2025-01-01 이후)
         if (line.includes('퇴직연금 이자/배당/상환 안내')) {
           let accNum = '', stockName = '', amount = 0, divDate = currentDate;
-          for (let j = i + 1; j < Math.min(lines.length, i + 8); j++) {
+          for (let j = i + 1; j < Math.min(lines.length, i + 12); j++) {
             const ck = lines[j].trim();
             if (ck.includes('계좌번호')) { const am = ck.match(/(\d{5})\*+/); if (am) accNum = am[1]; }
-            if (!stockName && ck.includes('상품명')) { const sm = ck.match(/:\s*(.+?)$/); if (sm) stockName = sm[1].trim(); }
-            if (amount === 0 && ck.includes('입금액')) { const am = ck.match(/:\s*([\d,]+)\s*원/); if (am) amount = parseInt(am[1].replace(/,/g, '')); }
+            // 상품명 또는 상품 정보 추출
+            if (!stockName && (ck.includes('상품명') || ck.includes('상품') || ck.includes('분배금'))) {
+              const sm = ck.match(/:\s*(.+?)$/);
+              if (sm) stockName = sm[1].trim();
+            }
+            // 입금액 또는 분배금액 추출
+            if (amount === 0 && (ck.includes('입금액') || ck.includes('분배금액') || ck.includes('지급액'))) {
+              const am = ck.match(/:\s*([\d,]+)\s*원/);
+              if (am) amount = parseInt(am[1].replace(/,/g, ''));
+            }
             const df = ck.match(/(\d{4})년\s+(\d+)월\s+(\d+)일/);
             if (df) divDate = `${df[1]}-${String(parseInt(df[2])).padStart(2,'0')}-${String(parseInt(df[3])).padStart(2,'0')}`;
           }
-          if (!stockName || !amount || !accNum) continue;
+          // 상품명이 없으면 "IRP 배당금" 또는 "퇴직연금" 사용
+          if (!stockName) stockName = '퇴직연금 배당';
+          if (!amount || !accNum) continue;
           if (divDate < DIV_CUTOFF) continue;
           let account = ACCOUNTS.find(a => a.num === accNum);
-          if (!account && (accNum === '70714' || accNum === '71714')) account = ACCOUNTS.find(a => a.id === 4);
+          // 70714번의 경우 IRP/퇴직연금 키워드로 명확히 구분
+          if (!account && (accNum === '70714' || accNum === '71714')) {
+            // "퇴직연금 이자/배당/상환 안내" 메시지는 IRP 계좌임
+            account = ACCOUNTS.find(a => a.id === 4);
+          }
           if (!account) continue;
           newDividends.push({ accountId: account.id, stock: stockName, amount, date: divDate, tax: 0 });
           dCnt++;
@@ -1115,8 +1165,12 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
       // 포트폴리오 배당수익률 = 총 배당 / 총 매수금액 × 100
       const portDivYield = totalInvested > 0 ? ((totalDiv / totalInvested) * 100).toFixed(2) : '0.00';
 
+      // 보유 종목 = 계좌별 중복을 제거한 고유 종목 수
+      const uniqueStocks = new Set(stocks.map(s => s.name));
+      const totalStocksCount = uniqueStocks.size;
+
       document.getElementById('totalEval').textContent = `₩${totalEval.toLocaleString()}`;
-      document.getElementById('totalStocks').textContent = stocks.length;
+      document.getElementById('totalStocks').textContent = totalStocksCount;
       document.getElementById('totalInvested').textContent = `₩${totalInvested.toLocaleString()}`;
       document.getElementById('totalPnL').innerHTML = totalPnL >= 0 ? `₩${totalPnL.toLocaleString()} <span class="profit">+${((totalPnL/totalInvested)*100).toFixed(1)}%</span>` : `<span class="loss">₩${totalPnL.toLocaleString()}</span>`;
       document.getElementById('totalDiv').textContent = `₩${totalDiv.toLocaleString()}`;
@@ -1126,6 +1180,7 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
       renderAccountsSummary();
       renderPortfolio();
       renderDividends();
+      renderTrades();
       renderAccountPieChart();
       renderStockPieChart();
       renderPnlChart();
@@ -1430,6 +1485,49 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
           </tr>`;
         }).join('');
       document.getElementById('stockDivSummaryBody').innerHTML = summaryRows || '<tr><td colspan="5" class="text-center text-gray-400 py-4">데이터 없음</td></tr>';
+    }
+
+    // 당일 거래 렌더링 (2026-06-19 12:50 이후)
+    function renderTrades() {
+      const tradeList = trades || [];
+      document.getElementById('tradeCount').textContent = `${tradeList.length}건`;
+      document.getElementById('tradeTotalCount').textContent = `${tradeList.length}건`;
+
+      // 거래 내역 렌더링 (최신순)
+      const sorted = [...tradeList].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+      document.getElementById('tradeTableBody').innerHTML = sorted.length
+        ? sorted.map(t => {
+            const acc = ACCOUNTS.find(a => a.id === t.accountId);
+            const dateTime = t.date ? t.date : '';
+            const time = t.time || '00:00';
+            const isBuy = t.type === '매수';
+            const typeStr = isBuy ? '매수' : '매도';
+            const typeColor = isBuy ? 'text-blue-600' : 'text-red-600';
+            return `<tr>
+              <td>${dateTime}</td>
+              <td>${time}</td>
+              <td>${acc ? acc.name : '?'}</td>
+              <td>${t.stockName}</td>
+              <td class="text-right ${typeColor} font-medium">${typeStr}</td>
+              <td class="text-right">${(t.qty || 0).toLocaleString()}주</td>
+              <td class="text-right">₩${(t.price || 0).toLocaleString()}</td>
+              <td class="text-right font-semibold">₩${(t.total || 0).toLocaleString()}</td>
+            </tr>`;
+          }).join('')
+        : '<tr><td colspan="8" class="text-center text-gray-400 py-6">당일 거래 내역 없음</td></tr>';
+
+      // 거래 요약 계산
+      const buyTrades = tradeList.filter(t => t.type === '매수');
+      const sellTrades = tradeList.filter(t => t.type === '매도');
+
+      const totalBuy = buyTrades.reduce((sum, t) => sum + (t.total || 0), 0);
+      const totalSell = sellTrades.reduce((sum, t) => sum + (t.total || 0), 0);
+      const netTrade = totalBuy - totalSell;
+
+      document.getElementById('totalBuyAmount').textContent = `₩${totalBuy.toLocaleString()}`;
+      document.getElementById('totalSellAmount').textContent = `₩${totalSell.toLocaleString()}`;
+      document.getElementById('netTradeAmount').textContent = `₩${(netTrade >= 0 ? '+' : '')}${netTrade.toLocaleString()}`;
+      document.getElementById('netTradeAmount').style.color = netTrade >= 0 ? '#16a34a' : '#dc2626';
     }
 
     function addStock(accountId) {
