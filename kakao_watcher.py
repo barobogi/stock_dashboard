@@ -218,7 +218,7 @@ def parse_kakao(filepath):
         'trades': trades,
         'deposits': deposits,
         'exchangeRate': EXCHANGE_RATE,
-        'updatedAt': datetime.now().isoformat(),
+        'pushedAt': datetime.now().isoformat(),
         'sourceFile': Path(filepath).name
     }
 
@@ -257,7 +257,7 @@ def git_push(data):
         print("  변경사항 없음 — push 생략")
         return False
 
-    msg = (f"auto: KakaoTalk 업데이트 {data['updatedAt'][:16]} "
+    msg = (f"auto: KakaoTalk 업데이트 {data['pushedAt'][:16]} "
            f"거래:{len(data['trades'])}건 배당:{len(data['dividends'])}건")
     subprocess.run(['git', 'commit', '-m', msg], check=True)
     subprocess.run(['git', 'push'], check=True)

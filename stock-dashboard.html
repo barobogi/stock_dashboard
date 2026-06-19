@@ -509,9 +509,12 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
         exchangeRate = kd.exchangeRate || 1512.8;
         document.getElementById('exchangeRateInput').value = exchangeRate;
         applyTrades();
-        const ua = kd.updatedAt;
-        if (ua) document.getElementById('statusText').textContent =
-          `자동 업데이트: ${ua.slice(0,16).replace('T',' ')}`;
+        const ua = kd.pushedAt || kd.updatedAt;
+        if (ua) {
+          const d = ua.slice(0,10).replace(/-/g,'.');
+          const t = ua.slice(11,16);
+          document.getElementById('statusText').textContent = `${d} ${t} 기준 (자동업데이트)`;
+        }
       } else {
         const raw = localStorage.getItem(STORAGE_KEY);
         if (raw) {
