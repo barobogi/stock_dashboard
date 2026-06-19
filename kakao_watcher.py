@@ -10,7 +10,7 @@ from watchdog.events import FileSystemEventHandler
 # ═══════════════════════════════════════════════════════════
 #  설정 — 본인 환경에 맞게 수정
 # ═══════════════════════════════════════════════════════════
-MYBOX_FOLDER   = r"C:\Users\82102\MYBOX"                    # 네이버 MYBOX 동기화 폴더
+MYBOX_FOLDER   = r"D:\AI\GD\KakaoTalk"                      # Google Drive 동기화 폴더
 REPO_PATH      = r"D:\AI\260619_2_Daily_for_stock_TEMP"     # Git 저장소 경로
 DASHBOARD_HTML = os.path.join(REPO_PATH, "stock-dashboard.html")
 KAKAO_KEYWORD  = "KakaoTalk"   # 감지할 파일명 키워드 (대소문자 무시)
