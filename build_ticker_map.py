@@ -19,20 +19,23 @@ KR_STOCKS = [
 ]
 
 sess = requests.Session()
-sess.headers['User-Agent'] = 'Mozilla/5.0'
+sess.headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
 
 def search_code(name):
-    for target in ['etf', 'stock,etf,corp']:
-        try:
-            r = sess.get('https://ac.finance.naver.com/ac',
-                params={'q': name, 'q_enc': 'utf8', 'target': target,
-                        'reorderFlag': 'N', 'limit': 10}, timeout=8)
-            for group in r.json().get('items', []):
-                for item in group:
-                    if isinstance(item, list) and len(item) >= 2 and item[0] == name:
-                        return str(item[1])
-        except Exception as e:
-            pass
+    # ac.stock.naver.com/ac — ac.finance.naver.com는 DNS 불가
+    try:
+        r = sess.get('https://ac.stock.naver.com/ac',
+            params={'q': name, 'q_enc': 'utf8', 'st': '111',
+                    'target': 'index,stock,etf,fund,bond,fx', 'lang': 'ko'}, timeout=8)
+        for item in r.json().get('items', []):
+            if item.get('name') == name:
+                return str(item['code'])
+        # 완전 일치 없으면 첫 번째 항목 반환 (ETF는 보통 첫 번째가 정확)
+        items = r.json().get('items', [])
+        if items and items[0].get('typeCode') in ('ETF', 'KOSPI', 'KOSDAQ'):
+            return str(items[0]['code'])
+    except Exception:
+        pass
     return None
 
 ticker_map = {}
