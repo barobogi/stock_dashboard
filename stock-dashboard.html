@@ -99,10 +99,14 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
           <p id="totalDiv" class="text-lg font-bold mt-1 text-green-600">₩0</p>
         </div>
       </div>
-      <div class="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
         <div class="bg-green-50 rounded-lg border border-green-200 p-3">
           <p class="text-xs text-gray-500 font-medium">📅 연간 배당 (최근 12개월)</p>
           <p id="annualDiv" class="text-lg font-bold mt-1 text-green-700">₩0</p>
+        </div>
+        <div class="bg-emerald-50 rounded-lg border border-emerald-200 p-3">
+          <p class="text-xs text-gray-500 font-medium">📆 월 평균 배당</p>
+          <p id="monthlyAvgDiv" class="text-lg font-bold mt-1 text-emerald-700">₩0</p>
         </div>
         <div class="bg-orange-50 rounded-lg border border-orange-200 p-3">
           <p class="text-xs text-gray-500 font-medium">🏛 납부 세금 합계</p>
@@ -112,6 +116,14 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
           <p class="text-xs text-gray-500 font-medium">📈 포트폴리오 배당수익률</p>
           <p id="portDivYield" class="text-lg font-bold mt-1 text-blue-600">0.00%</p>
         </div>
+      </div>
+      <!-- FIRE 진행도 -->
+      <div class="bg-white border border-[#E5E7EB] rounded-lg p-4 mb-6">
+        <div class="flex justify-between items-center mb-2">
+          <h2 class="text-sm font-semibold">🔥 FIRE 목표 달성률</h2>
+          <button onclick="setFireTarget()" class="text-xs text-gray-400 underline">목표 변경</button>
+        </div>
+        <div id="fireProgressSection"></div>
       </div>
       <div class="grid grid-cols-1 lg:grid-cols-5 gap-6 mb-6">
         <div class="lg:col-span-3">
@@ -234,6 +246,10 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
             <tbody id="stockDivSummaryBody"></tbody>
           </table>
         </div>
+      </div>
+      <div class="mt-6">
+        <h3 class="text-sm font-semibold mb-3">🔮 다음 달 예상 분배금 <span class="text-xs text-gray-400 font-normal">(최근 6개월 월평균)</span></h3>
+        <div id="nextMonthDistSection"></div>
       </div>
       <div class="mt-6">
         <h3 class="text-sm font-semibold mb-3">📈 월별 배당 추이</h3>
@@ -1175,7 +1191,9 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
       document.getElementById('totalInvested').textContent = `₩${totalInvested.toLocaleString()}`;
       document.getElementById('totalPnL').innerHTML = totalPnL >= 0 ? `₩${totalPnL.toLocaleString()} <span class="profit">+${((totalPnL/totalInvested)*100).toFixed(1)}%</span>` : `<span class="loss">₩${totalPnL.toLocaleString()}</span>`;
       document.getElementById('totalDiv').textContent = `₩${totalDiv.toLocaleString()}`;
+      const monthlyAvgDiv = Math.round(annualDiv / 12);
       document.getElementById('annualDiv').textContent = `₩${annualDiv.toLocaleString()}`;
+      document.getElementById('monthlyAvgDiv').textContent = `₩${monthlyAvgDiv.toLocaleString()}`;
       document.getElementById('totalTax').textContent = `₩${totalTax.toLocaleString()}`;
       document.getElementById('portDivYield').textContent = `${portDivYield}%`;
       renderAccountsSummary();
@@ -1189,16 +1207,39 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
       renderStockDivChart();
       renderAccDivChart();
       renderReturns();
+      renderNextMonthDist();
+      renderFireProgress();
+      checkAutoSnapshot();
     }
 
     function renderAccountsSummary() {
+      const totalEvalAll = stocks.reduce((a,b) => a+(b.evalAmount||0), 0);
+      const taxLabels = { general:'배당세 15.4%', isa:'ISA 비과세/9.9%', irp:'IRP 세액공제 16.5%', pension:'연금 세액공제 16.5%' };
       document.getElementById('accountsSummary').innerHTML = ACCOUNTS.map(acc => {
         const s = stocks.filter(x => x.accountId === acc.id);
         const evalAmt = s.reduce((sum, x) => sum + (x.evalAmount || 0), 0);
-        const pct = stocks.reduce((a,b)=>a+(b.evalAmount||0),0) > 0 ? (evalAmt / stocks.reduce((a,b)=>a+(b.evalAmount||0),0) * 100) : 0;
+        const buyAmt  = s.reduce((sum, x) => sum + (x.buyAmount  || 0), 0);
+        const pct = totalEvalAll > 0 ? (evalAmt / totalEvalAll * 100) : 0;
+        const pnl = evalAmt - buyAmt;
+        const pnlPct = buyAmt > 0 ? (pnl / buyAmt * 100) : 0;
+        const pnlColor = pnl >= 0 ? 'text-green-600' : 'text-red-500';
+        const accDivs = activeDividends.filter(d => d.accountId === acc.id);
+        const accDiv  = accDivs.reduce((s, d) => s + d.amount, 0);
+        const accTax  = accDivs.reduce((s, d) => s + (d.tax || 0), 0);
+        const divLine = accDiv > 0
+          ? `<p class="text-xs text-green-600 mt-0.5">배당 ₩${accDiv.toLocaleString()}${accTax > 0 ? ` · 세금 ₩${accTax.toLocaleString()}` : ' · 세금 없음'}</p>`
+          : '';
         return `<div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-[#E5E7EB]">
-          <div><p class="text-sm font-medium">${acc.name} <span class="text-xs text-gray-400 font-normal">(${acc.acctNum})</span></p><p class="text-xs text-gray-400">${s.length}개 종목</p></div>
-          <div class="text-right"><p class="text-sm font-semibold">₩${evalAmt.toLocaleString()}</p><p class="text-xs text-gray-400">${pct.toFixed(1)}%</p></div>
+          <div>
+            <p class="text-sm font-medium">${acc.name} <span class="text-xs text-gray-400 font-normal">(${acc.acctNum})</span></p>
+            <p class="text-xs text-gray-400">${s.length}개 종목 · <span class="text-purple-500">${taxLabels[acc.type]||''}</span></p>
+            ${divLine}
+          </div>
+          <div class="text-right">
+            <p class="text-sm font-semibold">₩${evalAmt.toLocaleString()}</p>
+            <p class="text-xs ${pnlColor}">${pnl>=0?'+':''}₩${pnl.toLocaleString()} (${pnlPct>=0?'+':''}${pnlPct.toFixed(1)}%)</p>
+            <p class="text-xs text-gray-400">${pct.toFixed(1)}%</p>
+          </div>
         </div>`;
       }).join('');
     }
@@ -1216,12 +1257,22 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
           const avgBuyPrice = x.qty > 0 ? Math.round((x.buyAmount || 0) / x.qty) : 0;
           const divTotal = divMap[x.accountId + '_' + x.name] || 0;
           const divYield = (x.buyAmount || 0) > 0 ? ((divTotal / x.buyAmount) * 100).toFixed(2) + '%' : '-';
+          const curP = x.curPrice || 0;
+          let bepCell;
+          if (avgBuyPrice <= 0 || x.qty <= 0) {
+            bepCell = '<span class="text-gray-300">-</span>';
+          } else if (curP >= avgBuyPrice) {
+            bepCell = `<span class="text-green-600 text-xs">✓ +${((curP-avgBuyPrice)/avgBuyPrice*100).toFixed(1)}%</span>`;
+          } else {
+            bepCell = `<span class="text-red-500 text-xs">₩${avgBuyPrice.toLocaleString()}<br>-${((avgBuyPrice-curP)/avgBuyPrice*100).toFixed(1)}%</span>`;
+          }
           return `<tr>
             <td class="font-medium">${x.name || '-'}</td>
             <td class="text-right">${x.qty || 0}</td>
             <td class="text-right">₩${(x.curPrice || 0).toLocaleString()}</td>
             <td class="text-right">₩${(x.evalAmount || 0).toLocaleString()}</td>
             <td class="text-right">₩${avgBuyPrice.toLocaleString()}</td>
+            <td class="text-right">${bepCell}</td>
             <td class="text-right">₩${(x.buyAmount || 0).toLocaleString()}</td>
             <td class="text-right text-green-600">${divYield}</td>
             <td class="text-center">
@@ -1235,7 +1286,7 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
             <div><p class="text-sm font-semibold">${acc.name} <span class="text-xs text-gray-400 font-normal">(${acc.acctNum})</span></p><p class="text-xs text-gray-400">${s.length}개 종목</p></div>
             <button onclick="addStock(${acc.id})" class="btn-primary text-xs">+ 추가</button>
           </div>
-        ${s.length ? `<div class="scroll-table" style="max-height:240px;"><table><tr class="bg-gray-50"><th>종목명</th><th class="text-right">수량</th><th class="text-right">현재가</th><th class="text-right">평가금액</th><th class="text-right">매수가</th><th class="text-right">매수금액</th><th class="text-right">배당수익률</th><th class="text-center">관리</th></tr>${rows}</table></div>` : '<p class="text-gray-400 text-sm">종목 없음</p>'}
+        ${s.length ? `<div class="scroll-table" style="max-height:240px;"><table><tr class="bg-gray-50"><th>종목명</th><th class="text-right">수량</th><th class="text-right">현재가</th><th class="text-right">평가금액</th><th class="text-right">매수가</th><th class="text-right">BEP</th><th class="text-right">매수금액</th><th class="text-right">배당수익률</th><th class="text-center">관리</th></tr>${rows}</table></div>` : '<p class="text-gray-400 text-sm">종목 없음</p>'}
         </div>`;
       }).join('');
     }
@@ -1272,6 +1323,90 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
       saveToStorage();
       renderReturns();
       if (type === '수동') alert(`스냅샷 저장 완료 (${date} ${time})`);
+    }
+
+    function renderNextMonthDist() {
+      const el = document.getElementById('nextMonthDistSection');
+      if (!el) return;
+      const now = new Date();
+      const sixAgo = new Date(now.getFullYear(), now.getMonth() - 6, 1).toISOString().slice(0, 10);
+      const byStock = {};
+      activeDividends.filter(d => d.date >= sixAgo).forEach(d => {
+        if (!byStock[d.stock]) byStock[d.stock] = { months: {}, total: 0 };
+        const m = d.date.slice(0, 7);
+        byStock[d.stock].months[m] = (byStock[d.stock].months[m] || 0) + d.amount;
+        byStock[d.stock].total += d.amount;
+      });
+      const entries = Object.entries(byStock)
+        .map(([name, v]) => {
+          const mc = Object.keys(v.months).length;
+          return { name, avg: Math.round(v.total / Math.max(mc, 1)), mc };
+        })
+        .filter(e => e.avg > 0 && e.mc >= 2)
+        .sort((a, b) => b.avg - a.avg);
+      const total = entries.reduce((s, e) => s + e.avg, 0);
+      if (!entries.length) { el.innerHTML = '<p class="text-gray-400 text-sm">배당 데이터 부족 (6개월 미만)</p>'; return; }
+      el.innerHTML = `<div class="bg-emerald-50 border border-emerald-200 rounded-lg p-3 mb-3 flex justify-between items-center">
+        <div><p class="text-xs text-gray-500">다음 달 예상 총 분배금</p><p class="text-xl font-bold text-emerald-700">₩${total.toLocaleString()}</p></div>
+        <div class="text-right"><p class="text-xs text-gray-400">연간 환산</p><p class="text-base font-bold text-emerald-600">₩${(total*12).toLocaleString()}</p></div>
+      </div>
+      <div class="scroll-table" style="max-height:220px;"><table>
+        <thead><tr><th>종목명</th><th class="text-right">월 평균 분배금</th><th class="text-right">연간 환산</th><th class="text-right">기준 월수</th></tr></thead>
+        <tbody>${entries.map(e => `<tr>
+          <td class="font-medium text-sm">${e.name}</td>
+          <td class="text-right text-green-600">₩${e.avg.toLocaleString()}</td>
+          <td class="text-right text-gray-500 text-xs">₩${(e.avg*12).toLocaleString()}</td>
+          <td class="text-right text-gray-400 text-xs">${e.mc}개월</td>
+        </tr>`).join('')}</tbody>
+      </table></div>`;
+    }
+
+    function renderFireProgress() {
+      const el = document.getElementById('fireProgressSection');
+      if (!el) return;
+      const totalEval = stocks.reduce((s, x) => s + (x.evalAmount || 0), 0);
+      const target = parseInt(localStorage.getItem('fire_target') || '0');
+      if (!target) {
+        el.innerHTML = `<div class="flex items-center gap-2">
+          <input type="number" id="fireTargetInput" placeholder="목표 금액 입력 (원)" class="border border-gray-300 rounded px-2 py-1 text-sm w-56">
+          <button onclick="setFireTarget()" class="btn-primary text-xs">목표 설정</button>
+        </div><p class="text-xs text-gray-400 mt-1">예: 1000000000 (10억)</p>`;
+        return;
+      }
+      const pct = Math.min(100, (totalEval / target * 100));
+      const remain = Math.max(0, target - totalEval);
+      const totalDiv12 = activeDividends.filter(d => {
+        const c = new Date(); c.setFullYear(c.getFullYear()-1);
+        return d.date >= c.toISOString().slice(0,10);
+      }).reduce((s,d) => s+d.amount, 0);
+      const yearsLeft = totalDiv12 > 0 && remain > 0 ? (remain / totalDiv12).toFixed(1) : '-';
+      el.innerHTML = `<div>
+        <div class="flex justify-between text-xs text-gray-500 mb-1">
+          <span>현재 ₩${totalEval.toLocaleString()}</span>
+          <span class="font-bold text-blue-600">${pct.toFixed(1)}% 달성</span>
+          <span>목표 ₩${target.toLocaleString()}</span>
+        </div>
+        <div class="bg-gray-200 rounded-full h-4 overflow-hidden">
+          <div class="h-4 rounded-full transition-all" style="width:${pct.toFixed(1)}%;background:linear-gradient(90deg,#3B82F6,#10B981)"></div>
+        </div>
+        <div class="flex justify-between text-xs mt-1">
+          <span class="text-gray-400">잔여 ₩${remain.toLocaleString()}</span>
+          <span class="text-gray-400">${yearsLeft !== '-' ? `배당 기준 약 ${yearsLeft}년 소요` : ''}</span>
+        </div>
+      </div>`;
+    }
+
+    function setFireTarget() {
+      const inp = document.getElementById('fireTargetInput');
+      const val = inp ? parseInt((inp.value||'').replace(/,/g,'')) : 0;
+      if (val > 0) {
+        localStorage.setItem('fire_target', val);
+        renderFireProgress();
+      } else {
+        const cur = localStorage.getItem('fire_target') || '';
+        const t = prompt('FIRE 목표 금액 (원)을 입력하세요\n예: 1000000000 (10억)', cur);
+        if (t) { localStorage.setItem('fire_target', parseInt(t.replace(/,/g,''))); renderFireProgress(); }
+      }
     }
 
     function checkAutoSnapshot() {
