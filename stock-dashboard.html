@@ -554,29 +554,42 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
       if (window.KAKAO_PARSED_DATA) {
         // Python watcher가 자동 주입한 데이터 사용
         const kd = window.KAKAO_PARSED_DATA;
-        stocks = DEFAULT_STOCKS.map(s => ({
-          ...s,
-          id: 'init_' + s.accountId + '_' + Date.now() + '_' + Math.random().toString(36).slice(2,6)
-        }));
-        dividends = kd.dividends || [];
-        trades    = kd.trades    || [];
-        deposits  = kd.deposits  || [];
-        snapshots = kd.snapshots || [];
-        exchangeRate = kd.exchangeRate || 1512.8;
-        document.getElementById('exchangeRateInput').value = exchangeRate;
-        applyTrades();
-        if (kd.prices) {
-          stocks.forEach(s => {
-            if (kd.prices[s.name] !== undefined) {
-              s.curPrice   = kd.prices[s.name];
-              s.evalAmount = Math.round(s.qty * s.curPrice);
-            }
-          });
+        // localStorage의 snapshots 보존 (클라이언트에서만 누적되는 데이터)
+        const storedRaw = localStorage.getItem(STORAGE_KEY);
+        let storedSnapshots = [], storedPushedAt = '';
+        if (storedRaw) {
+          try { const sd = JSON.parse(storedRaw); storedSnapshots = sd.snapshots || []; storedPushedAt = sd.pushedAt || ''; } catch(e) {}
         }
-        const ua = kd.pushedAt || kd.updatedAt;
-        if (ua) {
-          const d = ua.slice(0,10).replace(/-/g,'.');
-          const t = ua.slice(11,16);
+        // KAKAO_PARSED_DATA가 localStorage보다 최신일 때만 데이터 갱신
+        const kdPushedAt = kd.pushedAt || '';
+        if (!storedPushedAt || kdPushedAt > storedPushedAt) {
+          stocks = DEFAULT_STOCKS.map(s => ({
+            ...s,
+            id: 'init_' + s.accountId + '_' + Date.now() + '_' + Math.random().toString(36).slice(2,6)
+          }));
+          dividends = kd.dividends || [];
+          trades    = kd.trades    || [];
+          deposits  = kd.deposits  || [];
+          exchangeRate = kd.exchangeRate || 1512.8;
+          applyTrades();
+          if (kd.prices) {
+            stocks.forEach(s => {
+              if (kd.prices[s.name] !== undefined) {
+                s.curPrice   = kd.prices[s.name];
+                s.evalAmount = Math.round(s.qty * s.curPrice);
+              }
+            });
+          }
+        } else {
+          // 같은 버전 — localStorage 데이터 사용 (수동 편집 보존)
+          if (storedRaw) loadFromStorage();
+        }
+        // snapshots는 항상 localStorage 것을 우선 사용
+        snapshots = storedSnapshots;
+        document.getElementById('exchangeRateInput').value = exchangeRate;
+        if (kdPushedAt) {
+          const d = kdPushedAt.slice(0,10).replace(/-/g,'.');
+          const t = kdPushedAt.slice(11,16);
           document.getElementById('statusText').textContent = `${d} ${t} 기준 (자동업데이트)`;
         }
       } else {
@@ -603,7 +616,8 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
     });
 
     function saveToStorage() {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ stocks, dividends, deposits, trades, snapshots, exchangeRate }));
+      const pushedAt = window.KAKAO_PARSED_DATA ? (window.KAKAO_PARSED_DATA.pushedAt || '') : '';
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ stocks, dividends, deposits, trades, snapshots, exchangeRate, pushedAt }));
     }
 
     function loadFromStorage() {
