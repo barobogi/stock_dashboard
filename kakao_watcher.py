@@ -85,6 +85,27 @@ def _naver_price(code):
     except Exception:
         return 0
 
+def fetch_exchange_rate():
+    """USD/KRW 환율 조회 (Dunamu API → Naver 폴백)"""
+    try:
+        r = _sess.get('https://quotation-api-cdn.dunamu.com/v1/forex/recent?codes=FRX.KRWUSD', timeout=5)
+        rate = float(r.json()[0].get('basePrice', 0))
+        if rate > 1000:
+            print(f"  환율 조회: 1 USD = ₩{rate:,.1f}")
+            return rate
+    except Exception:
+        pass
+    try:
+        r = _sess.get('https://m.stock.naver.com/front-api/v1/index/info?indexCode=FRX.KRWUSD', timeout=5)
+        rate = float(str(r.json().get('result', {}).get('closePrice', '0')).replace(',', ''))
+        if rate > 1000:
+            print(f"  환율 조회(Naver): 1 USD = ₩{rate:,.1f}")
+            return rate
+    except Exception:
+        pass
+    print(f"  환율 조회 실패 — 기존값 사용: ₩{EXCHANGE_RATE}")
+    return None
+
 def fetch_prices():
     """포트폴리오 전 종목 현재가 조회. {종목명: 현재가(원)} 반환"""
     ticker_map = {}
@@ -439,6 +460,8 @@ def parse_kakao(filepath):
         'trades': trades,
         'deposits': deposits,
         'exchangeRate': EXCHANGE_RATE,
+        'tradeDateCut': TRADE_DATE_CUT,
+        'tradeTimeCut': TRADE_TIME_CUT,
         'pushedAt': datetime.now().isoformat(),
         'sourceFile': Path(filepath).name
     }
@@ -519,6 +542,11 @@ def refresh_prices_only():
             print("  KAKAO_PARSED_DATA 없음 — 갱신 건너뜀")
             return
         data = json.loads(m.group(1))
+        new_rate = fetch_exchange_rate()
+        if new_rate:
+            global EXCHANGE_RATE
+            EXCHANGE_RATE = new_rate
+            data['exchangeRate'] = new_rate
         print("  현재가 조회 중...")
         data['prices']   = fetch_prices()
         data['pushedAt'] = datetime.now().isoformat()
@@ -557,7 +585,13 @@ def process_file(filepath):
     print(f"[{datetime.now().strftime('%H:%M:%S')}] 처리 시작: {Path(filepath).name}")
     try:
         with _processing_lock:
-            data   = parse_kakao(filepath)
+            new_rate = fetch_exchange_rate()
+            if new_rate:
+                global EXCHANGE_RATE
+                EXCHANGE_RATE = new_rate
+            data = parse_kakao(filepath)
+            if new_rate:
+                data['exchangeRate'] = new_rate
             print("  현재가 조회 중...")
             data['prices'] = fetch_prices()
             inject_to_html(data)
