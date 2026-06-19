@@ -449,12 +449,24 @@ class MYBOXHandler(FileSystemEventHandler):
 
     def _check(self, path):
         name = Path(path).name
-        if (path not in self._done
-                and name.lower().endswith('.txt')
-                and KAKAO_KEYWORD.lower() in name.lower()):
-            self._done.add(path)
-            time.sleep(3)   # 파일 쓰기 완료 대기
-            process_file(path)
+        # 카카오톡 파일 판별: 확장자/이름 불문하고 폴더 내 모든 신규 파일 시도
+        # (카카오톡 내보내기 파일명이 매번 달라서 내용으로 판단)
+        if path in self._done:
+            return
+        # 숨김파일·임시파일 제외
+        if name.startswith('.') or name.startswith('~') or name.endswith('.tmp'):
+            return
+        self._done.add(path)
+        time.sleep(3)   # 파일 쓰기 완료 대기
+        # 카카오톡 대화 파일인지 첫 줄로 확인
+        try:
+            first = Path(path).read_text(encoding='utf-8', errors='ignore')[:100]
+        except Exception:
+            first = ''
+        if '카카오톡' not in first and 'KakaoTalk' not in first:
+            print(f"  ⏭️  카카오톡 파일 아님, 건너뜀: {name}")
+            return
+        process_file(path)
 
     def on_created(self, event):
         if not event.is_directory: self._check(event.src_path)

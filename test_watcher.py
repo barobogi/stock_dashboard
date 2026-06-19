@@ -1,15 +1,15 @@
+# -*- coding: utf-8 -*-
 import sys
 sys.stdout.reconfigure(encoding='utf-8')
 
-# kakao_watcher 함수들만 임포트 (main() 실행 방지)
-import importlib.util, types
+import importlib.util
 
 spec = importlib.util.spec_from_file_location("kw", "kakao_watcher.py")
 mod  = importlib.util.module_from_spec(spec)
-mod.__name__ = "kw"   # __main__ 방지
+mod.__name__ = "kw"
 spec.loader.exec_module(mod)
 
-filepath = r"G:\내 드라이브\KakaoTalk\KakaoTalkChats_260619_1700.txt"
+filepath = r"G:\내 드라이브\KakaoTalk\06190616"
 
 print(f"파일 파싱 시작: {filepath}")
 try:
