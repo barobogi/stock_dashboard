@@ -38,14 +38,14 @@ US_STOCKS = {
     'BTQ 테크놀로지스':        'BTQ',
     '셀레스티카':             'CLS',
     '아이렌':                 'IREN',
-    '실스크':                 'SLRX',
+    '실스크':                 'LAES',
     '엔비디아':               'NVDA',
     '파가야 테크놀로지스':     'PGY',
     '퀀텀스케이프':           'QS',
     'Schwab 미국 배당주 ETF': 'SCHD',
     '서프 에어 모빌리티':     'SRFM',
     '팔란티어 테크놀로지스':  'PLTR',
-    'Leverage Shares 2X Long CBRS Daily ETF': 'CBRS',
+    # 'Leverage Shares 2X Long CBRS Daily ETF': 'CBRS',  # Yahoo 'CBRS'는 다른 종목 → 잘못된 가격
 }
 
 # 파싱 기준
@@ -260,6 +260,36 @@ def parse_kakao(filepath):
             dividends.append({'accountId': account['id'], 'stock': stock_name,
                               'amount': amount, 'date': div_date, 'tax': tax})
 
+        # ── IRP 퇴직연금 배당 (입금액 형식) ─────────────────────
+        if '퇴직연금 이자/배당/상환 안내' in line:
+            sname_irpd = acc_irpd = ''; amount_irpd = 0
+            div_date_irpd = cur_date
+            for j in range(i+1, min(len(lines), i+12)):
+                ck = lines[j].strip()
+                if re.search(r'\d{4}년 \d+월 \d+일', ck) and '삼성증권' in ck:
+                    break
+                if not sname_irpd and '상품명' in ck:
+                    sm = re.search(r'상품명\s*:\s*(.+?)$', ck)
+                    if sm: sname_irpd = sm.group(1).strip()
+                if not acc_irpd and '계좌번호' in ck:
+                    am2 = re.search(r'(\d{5})\*+', ck)
+                    if am2: acc_irpd = am2.group(1)
+                if not amount_irpd and '입금액' in ck:
+                    pm = re.search(r'입금액\s*:\s*([\d,]+)\s*원', ck)
+                    if pm: amount_irpd = to_int(pm.group(1))
+                if '입금일' in ck:
+                    d = parse_date(ck)
+                    if d: div_date_irpd = d
+            if sname_irpd and acc_irpd and amount_irpd > 0 and div_date_irpd >= DIV_CUTOFF:
+                ctx_irpd = [line] + [lines[j].strip() for j in range(i+1, min(len(lines),i+12))]
+                account_irpd = find_account(acc_irpd, ctx_irpd)
+                if account_irpd:
+                    key_irpd = f"{div_date_irpd}_{account_irpd['id']}_{sname_irpd}"
+                    if key_irpd not in div_keys:
+                        div_keys.add(key_irpd)
+                        dividends.append({'accountId': account_irpd['id'], 'stock': sname_irpd,
+                                          'amount': amount_irpd, 'date': div_date_irpd, 'tax': 0})
+
         # ── 국내 매수/매도 ────────────────────────────────
         m_dom = re.search(r'(매수|매도)(\d+)주\s*([\d,]+)원', line)
         if m_dom:
@@ -273,39 +303,62 @@ def parse_kakao(filepath):
 
                 for j in range(max(0,i-10), min(len(lines),i+5)):
                     ck = lines[j].strip()
-                    if not sname and '종목명' in ck:
-                        sm = re.search(r'종목명\s*:\s*(.+?)(?:\s*$|-)', ck)
+                    # 구 포맷(2025): '종목명 :' 레이블
+                    if not sname and '종목명' in ck and ':' in ck:
+                        sm = re.search(r'종목명\s*:\s*(.+?)$', ck)
                         if sm: sname = sm.group(1).strip()
+                    # 구 포맷(2025): '계좌번호 :' 레이블
                     if not acc_num2 and '계좌번호' in ck:
                         am2 = re.search(r'(\d{5})\*+', ck)
                         if am2: acc_num2 = am2.group(1)
+                    # 구 포맷(2025): 주식체결안내 헤더에 계좌+종목명 내장
+                    if '주식체결안내' in ck:
+                        if not sname:
+                            sm2 = re.search(r'\d{5}\*+\s*-\s*\d+\s+(.+?)$', ck)
+                            if sm2: sname = sm2.group(1).strip()
+                        if not acc_num2:
+                            am3 = re.search(r'(\d{5})\*+', ck)
+                            if am3: acc_num2 = am3.group(1)
                     d, t = parse_datetime(ck)
                     if d: t_date = d
                     if t: t_time = t
 
+                # 신 포맷(2026): i-1=종목명, i-2=계좌번호 (별도 줄)
+                if not sname and i >= 1:
+                    prev1 = lines[i-1].strip()
+                    if prev1 and not re.search(r'\*', prev1) and \
+                       not re.search(r'주문|체결|안내', prev1) and '원' not in prev1:
+                        sname = prev1
+                if not acc_num2 and i >= 2:
+                    am5 = re.search(r'(\d{5})\*+', lines[i-2].strip())
+                    if am5: acc_num2 = am5.group(1)
+
                 if t_date < TRADE_DATE_CUT: continue
-                if t_date == TRADE_DATE_CUT and t_time < TRADE_TIME_CUT: continue
                 if not sname or not acc_num2: continue
                 account = find_account(acc_num2, lines[max(0,i-5):min(len(lines),i+3)])
                 if not account: continue
 
+                apply = (t_date > TRADE_DATE_CUT) or \
+                        (t_date == TRADE_DATE_CUT and t_time >= TRADE_TIME_CUT)
                 trades.append({'accountId': account['id'], 'stockName': sname,
                                'type': t_type, 'qty': qty, 'price': price,
-                               'date': t_date, 'total': qty*price})
+                               'date': t_date, 'total': qty*price,
+                               'applyToPortfolio': apply})
 
-        # ── 해외 매수/매도 ────────────────────────────────
-        if '체결가격' in line and 'USD' in line:
-            pm = re.search(r'체결가격\s*:\s*([\d.]+)\s*USD', line)
-            if not pm: continue
-            krw_price = round(float(pm.group(1)) * EXCHANGE_RATE)
-
+        # ── 해외 매수/매도 (헤더 기반 전진 파싱) ──────────────────
+        if '해외주식 매매 체결 안내' in line:
+            d0, t0 = parse_datetime(line)
+            t_date2 = d0 or cur_date; t_time2 = t0 or cur_time
             sname = acc_num3 = ''; qty2 = 0
-            t_type2 = '매수'; t_date2 = cur_date; t_time2 = cur_time
+            t_type2 = '매수'; krw_price = 0
 
-            for j in range(max(0,i-20), min(len(lines),i+10)):
+            for j in range(i+1, min(len(lines), i+18)):
                 ck = lines[j].strip()
+                # 다음 메시지 헤더 감지 → 중단
+                if re.search(r'\d{4}년 \d+월 \d+일', ck) and '삼성증권' in ck:
+                    break
                 if not sname and '종목명' in ck:
-                    sm = re.search(r'종목명\s*:\s*(.+?)(?:\s*$|-)', ck)
+                    sm = re.search(r'종목명\s*:\s*(.+?)$', ck)
                     if sm: sname = sm.group(1).strip()
                 if not qty2:
                     qm = re.search(r'체결수량\s*:\s*(\d+)', ck)
@@ -313,20 +366,54 @@ def parse_kakao(filepath):
                 if not acc_num3 and '계좌번호' in ck:
                     am2 = re.search(r'(\d{5})\*+', ck)
                     if am2: acc_num3 = am2.group(1)
-                if '매도' in ck: t_type2 = '매도'
-                d, t = parse_datetime(ck)
-                if d: t_date2 = d
-                if t: t_time2 = t
+                if '해외주식 매도 주문' in ck: t_type2 = '매도'
+                if not krw_price and '체결가격' in ck and 'USD' in ck:
+                    pm = re.search(r'체결가격\s*:\s*([\d.]+)\s*USD', ck)
+                    if pm: krw_price = round(float(pm.group(1)) * EXCHANGE_RATE)
 
-            if t_date2 < TRADE_DATE_CUT: continue
-            if t_date2 == TRADE_DATE_CUT and t_time2 < TRADE_TIME_CUT: continue
-            if not sname or not qty2 or not acc_num3: continue
-            account = find_account(acc_num3, lines[max(0,i-20):min(len(lines),i+10)])
-            if not account: continue
+            if t_date2 >= TRADE_DATE_CUT and sname and qty2 and krw_price and acc_num3:
+                account = find_account(acc_num3, [line])
+                if account:
+                    apply2 = (t_date2 > TRADE_DATE_CUT) or \
+                             (t_date2 == TRADE_DATE_CUT and t_time2 >= TRADE_TIME_CUT)
+                    trades.append({'accountId': account['id'], 'stockName': sname,
+                                   'type': t_type2, 'qty': qty2, 'price': krw_price,
+                                   'date': t_date2, 'total': qty2*krw_price, 'isOverseas': True,
+                                   'applyToPortfolio': apply2})
 
-            trades.append({'accountId': account['id'], 'stockName': sname,
-                           'type': t_type2, 'qty': qty2, 'price': krw_price,
-                           'date': t_date2, 'total': qty2*krw_price, 'isOverseas': True})
+        # ── IRP/퇴직연금 ETF 국내 체결 ───────────────────────────
+        if '체결단가' in line:
+            pm_irp = re.search(r'체결단가\s*:\s*([\d,]+)\s*원', line)
+            if pm_irp:
+                ctx_irp = [lines[j].strip() for j in range(max(0,i-15), min(len(lines),i+5))]
+                if any('퇴직연금' in c for c in ctx_irp):
+                    price_irp = to_int(pm_irp.group(1))
+                    sname_irp = acc_irp = ''; qty_irp = 0
+                    t_type_irp = '매수'; t_date_irp = cur_date; t_time_irp = cur_time
+                    for j in range(max(0,i-15), min(len(lines),i+5)):
+                        ck = lines[j].strip()
+                        if not sname_irp and '종목명' in ck:
+                            sm = re.search(r'종목명\s*:\s*(.+?)$', ck)
+                            if sm: sname_irp = sm.group(1).strip()
+                        if not qty_irp:
+                            qm = re.search(r'체결수량\s*:\s*(\d+)', ck)
+                            if qm: qty_irp = int(qm.group(1))
+                        if not acc_irp and '계좌번호' in ck:
+                            am2 = re.search(r'(\d{5})\*+', ck)
+                            if am2: acc_irp = am2.group(1)
+                        if '매도' in ck and '매매구분' in ck: t_type_irp = '매도'
+                        d, t = parse_datetime(ck)
+                        if d: t_date_irp = d
+                        if t: t_time_irp = t
+                    if t_date_irp >= TRADE_DATE_CUT and sname_irp and qty_irp and acc_irp:
+                        account_irp = find_account(acc_irp, ctx_irp)
+                        if account_irp:
+                            apply_irp = (t_date_irp > TRADE_DATE_CUT) or \
+                                        (t_date_irp == TRADE_DATE_CUT and t_time_irp >= TRADE_TIME_CUT)
+                            trades.append({'accountId': account_irp['id'], 'stockName': sname_irp,
+                                           'type': t_type_irp, 'qty': qty_irp, 'price': price_irp,
+                                           'date': t_date_irp, 'total': qty_irp * price_irp,
+                                           'applyToPortfolio': apply_irp})
 
         # ── 입금 ──────────────────────────────────────────
         if '입금' in line and re.search(r'[\d,]+\s*원', line):
