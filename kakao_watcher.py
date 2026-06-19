@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 # kakao_watcher.py — 카카오톡 파일 자동 감지 → 파싱 → GitHub push → Netlify 배포
 
-import os, re, json, time, sys, subprocess, requests
+import os, re, json, time, sys, subprocess, requests, threading
 from datetime import datetime
 from pathlib import Path
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
+
+_processing_lock = threading.Lock()
 
 # ═══════════════════════════════════════════════════════════
 #  설정 — 본인 환경에 맞게 수정
@@ -502,17 +504,64 @@ $n.Dispose()
     subprocess.Popen(['powershell', '-WindowStyle', 'Hidden', '-Command', ps])
 
 # ═══════════════════════════════════════════════════════════
+#  현재가만 갱신 (카카오톡 파일 없이 가격만 업데이트)
+# ═══════════════════════════════════════════════════════════
+def refresh_prices_only():
+    """현재 KAKAO_PARSED_DATA에서 prices + pushedAt만 갱신하여 재주입"""
+    with _processing_lock:
+        print(f"\n[{datetime.now().strftime('%H:%M:%S')}] 정시 현재가 자동 갱신")
+        html = Path(DASHBOARD_HTML).read_text(encoding='utf-8')
+        m = re.search(
+            r'<!-- KAKAO_AUTO:START -->\s*<script>window\.KAKAO_PARSED_DATA=(.+?);</script>\s*<!-- KAKAO_AUTO:END -->',
+            html, re.DOTALL
+        )
+        if not m:
+            print("  KAKAO_PARSED_DATA 없음 — 갱신 건너뜀")
+            return
+        data = json.loads(m.group(1))
+        print("  현재가 조회 중...")
+        data['prices']   = fetch_prices()
+        data['pushedAt'] = datetime.now().isoformat()
+        inject_to_html(data)
+
+        os.chdir(REPO_PATH)
+        subprocess.run(['git', 'add', 'stock-dashboard.html'], check=True)
+        diff = subprocess.run(['git', 'diff', '--cached', '--stat'],
+                              capture_output=True, text=True).stdout.strip()
+        if not diff:
+            print("  가격 변동 없음 — push 생략")
+            return
+        n = len(data.get('prices', {}))
+        subprocess.run(['git', 'commit', '-m',
+                        f"auto: 현재가 갱신 {data['pushedAt'][:16]} 현재가:{n}개"], check=True)
+        subprocess.run(['git', 'push'], check=True)
+        print(f"  ✅ 현재가 갱신 완료 ({n}개)")
+        notify("📈 현재가 갱신", f"{n}개 종목 업데이트 · Netlify 배포 중")
+
+def _hourly_price_refresh_loop():
+    """매 정시에 현재가 갱신 (백그라운드 스레드)"""
+    while True:
+        now = datetime.now()
+        secs = 3600 - (now.minute * 60 + now.second)
+        time.sleep(secs)
+        try:
+            refresh_prices_only()
+        except Exception as e:
+            print(f"  ❌ 정시 갱신 오류: {e}")
+
+# ═══════════════════════════════════════════════════════════
 #  파일 처리 파이프라인
 # ═══════════════════════════════════════════════════════════
 def process_file(filepath):
     print(f"\n{'='*55}")
     print(f"[{datetime.now().strftime('%H:%M:%S')}] 처리 시작: {Path(filepath).name}")
     try:
-        data   = parse_kakao(filepath)
-        print("  현재가 조회 중...")
-        data['prices'] = fetch_prices()
-        inject_to_html(data)
-        pushed = git_push(data)
+        with _processing_lock:
+            data   = parse_kakao(filepath)
+            print("  현재가 조회 중...")
+            data['prices'] = fetch_prices()
+            inject_to_html(data)
+            pushed = git_push(data)
 
         t, d = len(data['trades']), len(data['dividends'])
         if pushed:
@@ -590,6 +639,13 @@ def main():
     print("=" * 55)
     print("카카오톡 → 내보내기 → MYBOX 저장 시 자동 처리됩니다.")
     print("종료: Ctrl+C\n")
+
+    # 매 정시 현재가 자동 갱신 백그라운드 스레드
+    t = threading.Thread(target=_hourly_price_refresh_loop, daemon=True)
+    t.start()
+    now = datetime.now()
+    mins_left = 60 - now.minute
+    print(f"  ⏰ 매 정시 현재가 자동 갱신 활성화 (다음 갱신: {mins_left}분 후)")
 
     handler  = MYBOXHandler()
     observer = Observer()
