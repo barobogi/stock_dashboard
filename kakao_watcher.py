@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # kakao_watcher.py — 카카오톡 파일 자동 감지 → 파싱 → GitHub push → Netlify 배포
 
-import os, re, json, time, sys, subprocess
+import os, re, json, time, sys, subprocess, requests
 from datetime import datetime
 from pathlib import Path
 from watchdog.observers import Observer
@@ -13,13 +13,145 @@ from watchdog.events import FileSystemEventHandler
 MYBOX_FOLDER   = r"G:\내 드라이브\KakaoTalk"                  # Google Drive 가상 드라이브
 REPO_PATH      = r"D:\AI\260619_2_Daily_for_stock_TEMP"     # Git 저장소 경로
 DASHBOARD_HTML = os.path.join(REPO_PATH, "stock-dashboard.html")
+TICKER_MAP_FILE= os.path.join(REPO_PATH, "ticker_map.json")
 KAKAO_KEYWORD  = "KakaoTalk"   # 감지할 파일명 키워드 (대소문자 무시)
 EXCHANGE_RATE  = 1512.8        # USD → KRW 기본 환율
+
+# ── 포트폴리오 국내 종목 (IRP 제외 — 가격체계 다름) ──────────────
+KR_STOCKS = [
+    'SOL 팔란티어미국채커버드콜혼합', 'SOL 팔란티어커버드콜OTM채권혼합',
+    '삼성전자', 'ACE 미국AI테크핵심산업액티브', 'SOL 200타겟위클리커버드콜',
+    'KODEX 미국우주항공', 'TIGER 현대차그룹플러스', 'KODEX 코스닥150레버리지',
+    'KODEX 테슬라커버드콜채권혼합액티브', 'KODEX 200타겟위클리커버드콜',
+    'PLUS 자사주매입고배당주', 'KODEX 미국나스닥100',
+    'TIGER 미국테크TOP10타겟커버드콜', 'RISE 200위클리커버드콜',
+    'ACE 미국빅테크7+데일리타겟커버드콜(합성)', 'TIGER 미국S&P500타겟데일리커버드콜',
+    'KODEX 금융고배당TOP10타겟위클리커버드콜', 'KODEX 금융고배당TOP10타겟커버드콜',
+    'KODEX 미국나스닥100데일리커버드콜OTM', 'KODEX 미국배당커버드콜액티브',
+    'ACE KRX금현물', 'KODEX 미국S&P500', 'RISE 글로벌자산배분액티브',
+]
+
+# ── 포트폴리오 해외 종목 (이름 → yfinance 티커) ─────────────────
+US_STOCKS = {
+    '앰프리어스 테크놀로지스': 'AMPX',
+    'AST 스페이스모바일':      'ASTS',
+    'BTQ 테크놀로지스':        'BTQ',
+    '셀레스티카':             'CLS',
+    '아이렌':                 'IREN',
+    '실스크':                 'SLRX',
+    '엔비디아':               'NVDA',
+    '파가야 테크놀로지스':     'PGY',
+    '퀀텀스케이프':           'QS',
+    'Schwab 미국 배당주 ETF': 'SCHD',
+    '서프 에어 모빌리티':     'SRFM',
+    '팔란티어 테크놀로지스':  'PLTR',
+    'Leverage Shares 2X Long CBRS Daily ETF': 'CBRS',
+}
 
 # 파싱 기준
 DIV_CUTOFF        = "2025-01-01"
 TRADE_DATE_CUT    = "2026-06-19"
 TRADE_TIME_CUT    = "12:50"
+
+# ═══════════════════════════════════════════════════════════
+#  현재가 조회 (Naver Finance + yfinance)
+# ═══════════════════════════════════════════════════════════
+_sess = requests.Session()
+_sess.headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+
+def _naver_search_code(name):
+    """Naver Finance 자동완성으로 종목코드 검색"""
+    for target in ['etf', 'stock,etf,corp']:
+        try:
+            r = _sess.get('https://ac.finance.naver.com/ac',
+                params={'q': name, 'q_enc': 'utf8', 'target': target,
+                        'reorderFlag': 'N', 'limit': 10}, timeout=5)
+            for group in r.json().get('items', []):
+                for item in group:
+                    if isinstance(item, list) and len(item) >= 2 and item[0] == name:
+                        return str(item[1])
+        except Exception:
+            pass
+    return None
+
+def _naver_price(code):
+    """Naver Finance 모바일 API로 종목 현재가(원) 조회"""
+    try:
+        r = _sess.get(f'https://m.stock.naver.com/api/stock/{code}/basic', timeout=5)
+        info = r.json().get('stockItemTotal', {})
+        return int(str(info.get('closePrice', '0')).replace(',', ''))
+    except Exception:
+        return 0
+
+def fetch_prices():
+    """포트폴리오 전 종목 현재가 조회. {종목명: 현재가(원)} 반환"""
+    ticker_map = {}
+    if os.path.exists(TICKER_MAP_FILE):
+        with open(TICKER_MAP_FILE, encoding='utf-8') as f:
+            ticker_map = json.load(f)
+
+    prices = {}
+    map_updated = False
+
+    try:
+        import yfinance as yf
+
+        # 국내 ETF / 주식: ticker_map 코드 → Yahoo {code}.KS
+        # 코드 없으면 Naver 자동검색 → 캐시
+        for name in KR_STOCKS:
+            code = ticker_map.get(name)
+            if not code:
+                code = _naver_search_code(name)
+                if code:
+                    ticker_map[name] = code
+                    map_updated = True
+            if not code:
+                continue
+            try:
+                ks = yf.Ticker(f"{code}.KS")
+                krw = ks.fast_info.last_price or 0
+                if krw > 0:
+                    prices[name] = int(round(krw))
+                else:
+                    # 장 마감 후엔 regularMarketPreviousClose 사용
+                    krw = ks.info.get('regularMarketPreviousClose', 0)
+                    if krw > 0:
+                        prices[name] = int(round(krw))
+            except Exception:
+                pass
+
+        # 해외 주식 / ETF
+        for name, ticker in US_STOCKS.items():
+            if not ticker:
+                continue
+            try:
+                usd = yf.Ticker(ticker).fast_info.last_price or 0
+                if usd > 0:
+                    prices[name] = int(round(usd * EXCHANGE_RATE))
+            except Exception:
+                pass
+
+    except ImportError:
+        # yfinance 없으면 Naver 가격 API 폴백
+        for name in KR_STOCKS:
+            code = ticker_map.get(name)
+            if not code:
+                code = _naver_search_code(name)
+                if code:
+                    ticker_map[name] = code
+                    map_updated = True
+            if code:
+                p = _naver_price(code)
+                if p > 0:
+                    prices[name] = p
+
+    if map_updated:
+        with open(TICKER_MAP_FILE, 'w', encoding='utf-8') as f:
+            json.dump(ticker_map, f, ensure_ascii=False, indent=2)
+
+    total = len(KR_STOCKS) + len(US_STOCKS)
+    print(f"  현재가 조회: {len(prices)}/{total}개 성공")
+    return prices
 
 # ═══════════════════════════════════════════════════════════
 #  계좌 정의
@@ -258,7 +390,8 @@ def git_push(data):
         return False
 
     msg = (f"auto: KakaoTalk 업데이트 {data['pushedAt'][:16]} "
-           f"거래:{len(data['trades'])}건 배당:{len(data['dividends'])}건")
+           f"거래:{len(data['trades'])}건 배당:{len(data['dividends'])}건 "
+           f"현재가:{len(data.get('prices',{}))}개")
     subprocess.run(['git', 'commit', '-m', msg], check=True)
     subprocess.run(['git', 'push'], check=True)
     print(f"  GitHub push 완료")
@@ -289,6 +422,8 @@ def process_file(filepath):
     print(f"[{datetime.now().strftime('%H:%M:%S')}] 처리 시작: {Path(filepath).name}")
     try:
         data   = parse_kakao(filepath)
+        print("  현재가 조회 중...")
+        data['prices'] = fetch_prices()
         inject_to_html(data)
         pushed = git_push(data)
 
