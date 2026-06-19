@@ -1626,7 +1626,8 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
       });
       const data = Object.entries(byName)
         .map(([name, v]) => ({ name, profit: v.eval - v.buy }))
-        .sort((a, b) => Math.abs(b.profit) - Math.abs(a.profit))
+        .filter(d => d.profit > 0)
+        .sort((a, b) => b.profit - a.profit)
         .slice(0, 10);
       if (!data.length) {
         document.getElementById('pnlChart').parentElement.innerHTML = '<p class="text-gray-400 text-sm py-8 text-center">데이터가 없습니다</p>';
