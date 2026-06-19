@@ -1,0 +1,1526 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>Stock Dashboard</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<style>
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", sans-serif; }
+.nav-active { color: #111827; border-bottom: 2px solid #5B8DEE; padding-bottom: 2px; }
+.tab-active { color: #5B8DEE; border-bottom: 2px solid #5B8DEE; }
+.tab-inactive { color: #9CA3AF; }
+.drag-over { background-color: #EBF0FF; border: 2px dashed #5B8DEE !important; }
+a:focus-visible, button:focus-visible { outline: 2px solid #5B8DEE; outline-offset: 2px; border-radius: 4px; }
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid #E5E7EB; font-size: 13px; }
+th { background-color: #F9FAFB; font-weight: 600; position: sticky; top: 0; z-index: 1; }
+.scroll-table { max-height: 400px; overflow-y: auto; border: 1px solid #E5E7EB; border-radius: 8px; }
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 50; display: flex; align-items: center; justify-content: center; }
+.modal-box { background: white; border-radius: 12px; padding: 24px; max-width: 560px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,0.15); }
+.btn-primary { background: #5B8DEE; color: white; padding: 6px 16px; border-radius: 6px; font-size: 13px; cursor: pointer; transition: background 0.2s; }
+.btn-primary:hover { background: #4A7DE0; }
+.btn-danger { background: #EF4444; color: white; padding: 6px 16px; border-radius: 6px; font-size: 13px; cursor: pointer; transition: background 0.2s; }
+.btn-danger:hover { background: #DC2626; }
+.btn-success { background: #10B981; color: white; padding: 6px 16px; border-radius: 6px; font-size: 13px; cursor: pointer; transition: background 0.2s; }
+.btn-success:hover { background: #059669; }
+.btn-outline { border: 1px solid #D1D5DB; padding: 6px 16px; border-radius: 6px; font-size: 13px; cursor: pointer; transition: background 0.2s; }
+.btn-outline:hover { background: #F3F4F6; }
+input[type="text"], input[type="number"], select { border: 1px solid #D1D5DB; border-radius: 6px; padding: 6px 10px; font-size: 13px; width: 100%; }
+input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; border-color: transparent; }
+.profit { color: #EF4444; font-weight: 600; }
+.loss { color: #2563EB; font-weight: 600; }
+</style>
+</head>
+<body class="bg-gray-50 text-[#111827] min-h-screen flex flex-col">
+
+  <header class="w-full bg-white border-b border-[#E5E7EB]" style="height:60px;">
+    <div class="max-w-7xl mx-auto px-6 h-full flex justify-between items-center">
+      <a href="#" class="text-base font-bold tracking-tight text-[#111827]">
+        📈 Stock <span class="text-[#5B8DEE]">Dashboard</span>
+      </a>
+      <nav class="flex gap-8 text-sm text-[#6B7280]">
+        <a href="index.html" class="hover:text-[#111827] transition-colors duration-200 pb-[2px]">Home</a>
+        <a href="logs.html" class="hover:text-[#111827] transition-colors duration-200 pb-[2px]">Logs</a>
+        <a href="ai-study.html" class="hover:text-[#111827] transition-colors duration-200 pb-[2px]">AI Study</a>
+        <a href="stock-dashboard.html" class="nav-active font-medium">Stock</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="max-w-7xl w-full mx-auto px-6 py-6 flex-grow">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
+      <div>
+        <h1 class="text-xl font-bold">주식 포트폴리오 대시보드</h1>
+        <p id="statusText" class="text-sm text-gray-500 mt-1">2026.06.18 기준</p>
+      </div>
+      <div class="flex gap-2 flex-wrap">
+        <button onclick="exportCSV()" class="btn-success text-xs">📊 CSV 내보내기</button>
+        <button onclick="exportData()" class="btn-outline text-xs">📤 JSON 내보내기</button>
+        <button onclick="resetData()" class="btn-danger text-xs">🗑 초기화</button>
+      </div>
+    </div>
+
+    <div class="bg-white border border-[#E5E7EB] rounded-t-lg flex flex-wrap">
+      <button onclick="switchTab('dashboard')" class="tab-button px-5 py-3 text-sm font-medium tab-active" data-tab="dashboard">📊 대시보드</button>
+      <button onclick="switchTab('portfolio')" class="tab-button px-5 py-3 text-sm font-medium tab-inactive" data-tab="portfolio">📁 포트폴리오</button>
+      <button onclick="switchTab('returns')" class="tab-button px-5 py-3 text-sm font-medium tab-inactive" data-tab="returns">📈 수익률</button>
+      <button onclick="switchTab('dividends')" class="tab-button px-5 py-3 text-sm font-medium tab-inactive" data-tab="dividends">💵 배당금</button>
+      <button onclick="switchTab('import')" class="tab-button px-5 py-3 text-sm font-medium tab-inactive" data-tab="import">📂 파일 불러오기</button>
+      <button onclick="switchTab('settings')" class="tab-button px-5 py-3 text-sm font-medium tab-inactive" data-tab="settings">⚙️ 관리</button>
+    </div>
+
+    <!-- TAB: DASHBOARD -->
+    <div id="dashboard" class="tab-content bg-white border border-t-0 border-[#E5E7EB] rounded-b-lg p-6">
+      <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+        <div class="bg-white rounded-lg border border-[#E5E7EB] p-3">
+          <p class="text-xs text-gray-500 font-medium">💰 총 평가금액</p>
+          <p id="totalEval" class="text-lg font-bold mt-1">₩0</p>
+        </div>
+        <div class="bg-white rounded-lg border border-[#E5E7EB] p-3">
+          <p class="text-xs text-gray-500 font-medium">📦 보유 종목</p>
+          <p id="totalStocks" class="text-lg font-bold mt-1">0</p>
+        </div>
+        <div class="bg-white rounded-lg border border-[#E5E7EB] p-3">
+          <p class="text-xs text-gray-500 font-medium">💵 총 매수금액</p>
+          <p id="totalInvested" class="text-lg font-bold mt-1">₩0</p>
+        </div>
+        <div class="bg-white rounded-lg border border-[#E5E7EB] p-3">
+          <p class="text-xs text-gray-500 font-medium">📊 총 손익</p>
+          <p id="totalPnL" class="text-lg font-bold mt-1">₩0</p>
+        </div>
+        <div class="bg-white rounded-lg border border-[#E5E7EB] p-3">
+          <p class="text-xs text-gray-500 font-medium">💵 총 배당금</p>
+          <p id="totalDiv" class="text-lg font-bold mt-1 text-green-600">₩0</p>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">
+        <div class="bg-green-50 rounded-lg border border-green-200 p-3">
+          <p class="text-xs text-gray-500 font-medium">📅 연간 배당 (최근 12개월)</p>
+          <p id="annualDiv" class="text-lg font-bold mt-1 text-green-700">₩0</p>
+        </div>
+        <div class="bg-orange-50 rounded-lg border border-orange-200 p-3">
+          <p class="text-xs text-gray-500 font-medium">🏛 납부 세금 합계</p>
+          <p id="totalTax" class="text-lg font-bold mt-1 text-orange-600">₩0</p>
+        </div>
+        <div class="bg-blue-50 rounded-lg border border-blue-200 p-3">
+          <p class="text-xs text-gray-500 font-medium">📈 포트폴리오 배당수익률</p>
+          <p id="portDivYield" class="text-lg font-bold mt-1 text-blue-600">0.00%</p>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 lg:grid-cols-5 gap-6 mb-6">
+        <div class="lg:col-span-3">
+          <h2 class="text-sm font-semibold mb-3">📋 계좌별 요약 (평가금액 기준)</h2>
+          <div id="accountsSummary" class="space-y-2"></div>
+        </div>
+        <div class="lg:col-span-2">
+          <h2 class="text-sm font-semibold mb-3">🥧 계좌별 평가 비중</h2>
+          <canvas id="accountPieChart" height="200"></canvas>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <div>
+          <h2 class="text-sm font-semibold mb-3">📊 종목별 평가 비중 (Top 10)</h2>
+          <canvas id="stockPieChart" height="200"></canvas>
+        </div>
+        <div>
+          <h2 class="text-sm font-semibold mb-3">📈 종목별 수익률 (Top 10)</h2>
+          <canvas id="pnlChart" height="200"></canvas>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div>
+          <h2 class="text-sm font-semibold mb-3">💰 종목별 누적 배당 Top 10</h2>
+          <canvas id="stockDivChart" height="220"></canvas>
+        </div>
+        <div>
+          <h2 class="text-sm font-semibold mb-3">🏦 계좌별 월별 배당 추이</h2>
+          <canvas id="accDivChart" height="220"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: PORTFOLIO -->
+    <div id="portfolio" class="tab-content bg-white border border-t-0 border-[#E5E7EB] rounded-b-lg p-6 hidden">
+      <div id="portfolioList" class="space-y-6"></div>
+    </div>
+
+    <!-- TAB: RETURNS -->
+    <div id="returns" class="tab-content bg-white border border-t-0 border-[#E5E7EB] rounded-b-lg p-6 hidden">
+      <div class="flex justify-between items-center mb-4">
+        <div>
+          <h2 class="text-sm font-semibold">📈 수익률 관리</h2>
+          <p class="text-xs text-gray-400 mt-1">페이지 열림 시 자동 저장: 오후 6시→일간 | 월요일 9시→주간 | 매월 1일 9시→월간 | 1월 1일 9시→연간</p>
+        </div>
+        <div class="flex gap-2">
+          <button onclick="saveSnapshot('수동')" class="btn-primary text-xs">📸 지금 스냅샷 저장</button>
+          <button onclick="clearSnapshots()" class="btn-danger text-xs">🗑 스냅샷 초기화</button>
+        </div>
+      </div>
+
+      <!-- 수익 요약 카드 -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+        <div class="bg-gray-50 rounded-lg p-4 border border-[#E5E7EB]">
+          <p class="text-xs text-gray-500 mb-1">미실현 손익</p>
+          <p id="ret-unrealized" class="text-base font-bold">-</p>
+          <p id="ret-unrealized-pct" class="text-xs mt-0.5">-</p>
+        </div>
+        <div class="bg-gray-50 rounded-lg p-4 border border-[#E5E7EB]">
+          <p class="text-xs text-gray-500 mb-1">실현 손익 <span class="text-gray-400">(매도 추정)</span></p>
+          <p id="ret-realized" class="text-base font-bold">-</p>
+          <p id="ret-realized-cnt" class="text-xs text-gray-400 mt-0.5">-</p>
+        </div>
+        <div class="bg-gray-50 rounded-lg p-4 border border-[#E5E7EB]">
+          <p class="text-xs text-gray-500 mb-1">배당 수익 <span class="text-gray-400">(보유종목)</span></p>
+          <p id="ret-div" class="text-base font-bold">-</p>
+          <p id="ret-div-pct" class="text-xs mt-0.5">-</p>
+        </div>
+        <div class="bg-gray-50 rounded-lg p-4 border border-[#E5E7EB] border-l-4 border-l-blue-400">
+          <p class="text-xs text-gray-500 mb-1">총 수익률 <span class="text-gray-400">(손익+배당)</span></p>
+          <p id="ret-total" class="text-base font-bold">-</p>
+          <p id="ret-total-pct" class="text-xs mt-0.5">-</p>
+        </div>
+      </div>
+
+      <!-- 기간별 수익률 -->
+      <div class="bg-gray-50 rounded-lg border border-[#E5E7EB] p-4 mb-5">
+        <h3 class="text-sm font-semibold mb-3">📅 기간별 수익률</h3>
+        <div class="scroll-table">
+          <table id="periodReturnsTable">
+            <tr class="bg-white"><th>구분</th><th>기준 스냅샷</th><th class="text-right">기준 평가금액</th><th class="text-right">현재 평가금액</th><th class="text-right">변동액</th><th class="text-right">수익률</th></tr>
+          </table>
+        </div>
+      </div>
+
+      <!-- 스냅샷 이력 -->
+      <div class="bg-gray-50 rounded-lg border border-[#E5E7EB] p-4 mb-5">
+        <h3 class="text-sm font-semibold mb-3">📋 스냅샷 이력</h3>
+        <div class="scroll-table" style="max-height:220px;">
+          <table id="snapshotTable">
+            <tr class="bg-white"><th>날짜</th><th>시간</th><th>구분</th><th class="text-right">평가금액</th><th class="text-right">매수금액</th><th class="text-right">손익</th><th class="text-right">누적배당</th><th class="text-center">삭제</th></tr>
+          </table>
+        </div>
+      </div>
+
+      <!-- 실현 손익 내역 -->
+      <div class="bg-gray-50 rounded-lg border border-[#E5E7EB] p-4">
+        <h3 class="text-sm font-semibold mb-1">💼 실현 손익 내역 <span class="text-gray-400 font-normal text-xs">(2026-06-19 12:50 이후 매도 · 현재 평균매수가 기준 추정)</span></h3>
+        <div id="realizedPnlSection" class="mt-3"></div>
+      </div>
+    </div>
+
+    <!-- TAB: DIVIDENDS -->
+    <div id="dividends" class="tab-content bg-white border border-t-0 border-[#E5E7EB] rounded-b-lg p-6 hidden">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-sm font-semibold">💵 배당금 내역 (보유 종목)</h2>
+        <span id="dividendTotal" class="text-sm font-bold text-green-600"></span>
+      </div>
+      <div class="scroll-table">
+        <table>
+          <thead><tr><th>날짜</th><th>계좌</th><th>종목명</th><th class="text-right">세후금액</th><th class="text-right">세금</th></tr></thead>
+          <tbody id="dividendTableBody"></tbody>
+        </table>
+      </div>
+      <div class="mt-6 mb-6">
+        <h3 class="text-sm font-semibold mb-3">📊 종목별 배당 요약</h3>
+        <div class="scroll-table" style="max-height:240px;">
+          <table>
+            <thead><tr><th>종목명</th><th class="text-right">건수</th><th class="text-right">누적 배당</th><th class="text-right">세금 합계</th><th class="text-right">배당수익률</th></tr></thead>
+            <tbody id="stockDivSummaryBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="mt-6">
+        <h3 class="text-sm font-semibold mb-3">📈 월별 배당 추이</h3>
+        <canvas id="divChart" height="200"></canvas>
+      </div>
+    </div>
+
+    <!-- TAB: IMPORT -->
+    <div id="import" class="tab-content bg-white border border-t-0 border-[#E5E7EB] rounded-b-lg p-6 hidden">
+      <div class="mb-6">
+        <h2 class="text-sm font-semibold mb-2">📂 잔고증명서 CSV 불러오기</h2>
+        <p class="text-xs text-gray-500 mb-4">삼성증권 잔고증명서 CSV 파일을 업로드하면 현재가/평가금액이 자동 반영됩니다.</p>
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+          <button onclick="loadCSV('70714801_일반계좌1.csv', 1)" class="btn-outline text-xs py-2">📄 일반계좌1</button>
+          <button onclick="loadCSV('70871601_일반계좌2.csv', 2)" class="btn-outline text-xs py-2">📄 일반계좌2</button>
+          <button onclick="loadCSV('71297814_ISA.csv', 3)" class="btn-outline text-xs py-2">📄 ISA</button>
+          <button onclick="loadCSV('71462515_연금저축1.csv', 5)" class="btn-outline text-xs py-2">📄 연금저축1</button>
+          <button onclick="loadCSV('71615215_연금저축2.csv', 6)" class="btn-outline text-xs py-2">📄 연금저축2</button>
+          <button onclick="loadCSV('70868215_연금저축3.csv', 7)" class="btn-outline text-xs py-2">📄 연금저축3</button>
+        </div>
+        <button onclick="loadAllCSV()" class="btn-primary text-xs mb-4">📥 모든 CSV 한번에 불러오기</button>
+        <div id="dropZoneCSV" class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-blue-400 transition-colors">
+          <p class="text-gray-500 mb-2">📁 CSV 파일을 드롭하거나 클릭하여 선택</p>
+          <p class="text-xs text-gray-400">70714801_일반계좌1.csv 등</p>
+          <input type="file" id="csvFileInput" class="hidden" accept=".csv" multiple onchange="handleCSVSelect(event)">
+        </div>
+        <div id="csvLog" class="mt-4 p-4 bg-gray-50 border border-[#E5E7EB] rounded max-h-32 overflow-y-auto text-xs font-mono whitespace-pre-wrap text-gray-600"></div>
+      </div>
+      <div class="border-t border-[#E5E7EB] pt-6">
+        <h2 class="text-sm font-semibold mb-2">📂 KakaoTalkChats_260619_1400.txt 불러오기</h2>
+        <p class="text-xs text-gray-500 mb-3">삼성증권 알림톡 TXT 파일 (매수단가/배당금/입금내역 파싱용)</p>
+        <div id="dropZone" class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-blue-400 transition-colors">
+          <p class="text-gray-500 mb-2">📁 TXT 파일을 드롭하거나 클릭</p>
+          <input type="file" id="fileInput" class="hidden" accept=".txt" onchange="handleFileSelect(event)">
+        </div>
+        <button onclick="autoLoadFile()" class="btn-outline text-xs mt-3">📥 KakaoTalkChats_260619_1400.txt 자동 불러오기</button>
+        <div id="importLog" class="mt-4 p-4 bg-gray-50 border border-[#E5E7EB] rounded max-h-32 overflow-y-auto text-xs font-mono whitespace-pre-wrap text-gray-600"></div>
+      </div>
+    </div>
+
+    <!-- TAB: SETTINGS -->
+    <div id="settings" class="tab-content bg-white border border-t-0 border-[#E5E7EB] rounded-b-lg p-6 hidden">
+      <div class="mb-6">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h2 class="text-sm font-semibold">⚙️ 계좌별 종목 관리</h2>
+            <p class="text-xs text-gray-500">종목 추가/수정/삭제, 현재가 입력, 평가금액 확인</p>
+          </div>
+        </div>
+        <div id="manageAccounts" class="space-y-4"></div>
+      </div>
+      <div class="border-t border-[#E5E7EB] pt-6">
+        <h3 class="text-sm font-semibold mb-3">📋 환율 설정</h3>
+        <div class="flex items-center gap-3">
+          <label class="text-sm text-gray-600">1 USD = </label>
+          <input type="number" id="exchangeRateInput" value="1512.8" class="w-28" onchange="updateExchangeRate(this.value)">
+          <span class="text-sm text-gray-600">원 (2026.06.18 기준)</span>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="w-full bg-white border-t border-[#E5E7EB] mt-auto">
+    <div class="max-w-7xl mx-auto px-6 py-6 flex justify-between items-center text-xs text-[#9CA3AF]">
+      <p>© 2026 Barobogi. 기준일: 2026.06.18 | 데이터: 삼성증권 잔고증명서</p>
+    </div>
+  </footer>
+
+
+  <!-- MODAL -->
+  <div id="stockModal" class="modal-overlay hidden" onclick="if(event.target===this)closeModal()">
+    <div class="modal-box" onclick="event.stopPropagation()">
+      <h3 id="modalTitle" class="text-base font-semibold mb-4">종목 추가/수정</h3>
+      <input type="hidden" id="editStockId">
+      <input type="hidden" id="editAccountId">
+      <div class="space-y-3">
+        <div>
+          <label class="text-xs text-gray-500 font-medium">종목명</label>
+          <input type="text" id="stockName" placeholder="예: 삼성전자">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs text-gray-500 font-medium">수량 (주)</label>
+            <input type="number" id="stockQty" placeholder="0" min="0" step="any">
+          </div>
+          <div>
+            <label class="text-xs text-gray-500 font-medium">매수단가 (원)</label>
+            <input type="number" id="stockPrice" placeholder="0" min="0">
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs text-gray-500 font-medium">현재가 (원)</label>
+            <input type="number" id="stockCurPrice" placeholder="0" min="0">
+          </div>
+          <div>
+            <label class="text-xs text-gray-500 font-medium">구분</label>
+            <select id="stockType">
+              <option value="주식">국내주식</option>
+              <option value="해외증권">해외증권</option>
+              <option value="수익증권">수익증권</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="flex justify-end gap-2 mt-6">
+        <button onclick="closeModal()" class="btn-outline text-xs">취소</button>
+        <button onclick="saveStock()" class="btn-primary text-xs">저장</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const ACCOUNTS = [
+      { id: 1, name: '일반 계좌 1', num: '70714', acctNum: '70714*****-01', type: 'general', desc: '미국주식 + 한국주식' },
+      { id: 2, name: '일반 계좌 2', num: '70871', acctNum: '70871*****-01', type: 'general', desc: '미국주식 + 한국주식' },
+      { id: 3, name: 'ISA',         num: '71297', acctNum: '71297*****-14', type: 'isa',     desc: 'ISA 계좌' },
+      { id: 4, name: 'IRP',         num: '70714', acctNum: '70714*****-29', type: 'irp',     desc: 'IRP 계좌 (퇴직연금)' },
+      { id: 5, name: '연금저축 1',  num: '71462', acctNum: '71462*****-15', type: 'pension', desc: '연금저축' },
+      { id: 6, name: '연금저축 2',  num: '71615', acctNum: '71615*****-15', type: 'pension', desc: '연금저축' },
+      { id: 7, name: '연금저축 3',  num: '70868', acctNum: '70868*****-15', type: 'pension', desc: '연금저축' }
+    ];
+
+    // 기본 계좌 데이터 (2026.06.19 12:50 기준 - stock_all_20260619_1250.csv)
+    const DEFAULT_STOCKS = [
+      // 일반 계좌 1
+      { accountId:1, name:'SOL 팔란티어미국채커버드콜혼합', qty:5, curPrice:9945, evalAmount:49725, type:'주식', buyAmount:56975 },
+      { accountId:1, name:'SOL 팔란티어커버드콜OTM채권혼합', qty:159, curPrice:8410, evalAmount:1337190, type:'주식', buyAmount:1437837 },
+      { accountId:1, name:'삼성전자', qty:118, curPrice:362500, evalAmount:42775000, type:'주식', buyAmount:16842022 },
+      { accountId:1, name:'ACE 미국AI테크핵심산업액티브', qty:26, curPrice:10200, evalAmount:265200, type:'주식', buyAmount:224276 },
+      { accountId:1, name:'SOL 200타겟위클리커버드콜', qty:82, curPrice:16485, evalAmount:1351770, type:'주식', buyAmount:963336 },
+      { accountId:1, name:'KODEX 미국우주항공', qty:158, curPrice:11965, evalAmount:1890470, type:'주식', buyAmount:1877988 },
+      { accountId:1, name:'TIGER 현대차그룹플러스', qty:36, curPrice:64545, evalAmount:2323620, type:'주식', buyAmount:2234124 },
+      { accountId:1, name:'KODEX 코스닥150레버리지', qty:322, curPrice:12430, evalAmount:4002460, type:'주식', buyAmount:3414810 },
+      { accountId:1, name:'KODEX 테슬라커버드콜채권혼합액티브', qty:29, curPrice:8530, evalAmount:247370, type:'주식', buyAmount:249574 },
+      { accountId:1, name:'KODEX 200타겟위클리커버드콜', qty:842, curPrice:28270, evalAmount:23803340, type:'주식', buyAmount:16301120 },
+      { accountId:1, name:'앰프리어스 테크놀로지스', qty:81, curPrice:16170, evalAmount:1981420, type:'해외증권', buyAmount:1913369 },
+      { accountId:1, name:'TRD2XLG APLD ETF', qty:1, curPrice:32430, evalAmount:49060, type:'해외증권', buyAmount:40209 },
+      { accountId:1, name:'TRADR 2X LNG ETF', qty:10, curPrice:33950, evalAmount:513595, type:'해외증권', buyAmount:757101 },
+      { accountId:1, name:'AST 스페이스모바일', qty:20, curPrice:80660, evalAmount:2440448, type:'해외증권', buyAmount:1927270 },
+      { accountId:1, name:'TRDR 2X ASTS ETF', qty:24, curPrice:24265, evalAmount:880994, type:'해외증권', buyAmount:1040318 },
+      { accountId:1, name:'BTQ 테크놀로지스', qty:12, curPrice:5675, evalAmount:103021, type:'해외증권', buyAmount:50710 },
+      { accountId:1, name:'Leverage Shares 2X Long CBRS Daily ETF', qty:400, curPrice:729, evalAmount:4411324, type:'해외증권', buyAmount:3869643 },
+      { accountId:1, name:'셀레스티카', qty:5, curPrice:372550, evalAmount:2817968, type:'해외증권', buyAmount:1299495 },
+      { accountId:1, name:'TRDR CLS DLY ETF', qty:270, curPrice:1998, evalAmount:8160950, type:'해외증권', buyAmount:9020115 },
+      { accountId:1, name:'RNDHL MEMRY ETF', qty:10, curPrice:7671, evalAmount:1160468, type:'해외증권', buyAmount:812762 },
+      { accountId:1, name:'아이렌', qty:32, curPrice:59960, evalAmount:2902639, type:'해외증권', buyAmount:2302487 },
+      { accountId:1, name:'실스크', qty:1, curPrice:3120, evalAmount:4719, type:'해외증권', buyAmount:5073 },
+      { accountId:1, name:'엔비디아', qty:1, curPrice:210690, evalAmount:195786, type:'해외증권', buyAmount:173908 },
+      { accountId:1, name:'파가야 테크놀로지스', qty:2, curPrice:15620, evalAmount:47259, type:'해외증권', buyAmount:33253 },
+      { accountId:1, name:'RNDHLL INVTN ETF', qty:19, curPrice:31510, evalAmount:905698, type:'해외증권', buyAmount:895976 },
+      { accountId:1, name:'퀀텀스케이프', qty:6, curPrice:8040, evalAmount:72977, type:'해외증권', buyAmount:87737 },
+      { accountId:1, name:'DFC DLY RKLB ETF', qty:30, curPrice:52450, evalAmount:2380390, type:'해외증권', buyAmount:2198880 },
+      { accountId:1, name:'Schwab 미국 배당주 ETF', qty:2, curPrice:31860, evalAmount:96395, type:'해외증권', buyAmount:73297 },
+      { accountId:1, name:'서프 에어 모빌리티', qty:20, curPrice:1170, evalAmount:35399, type:'해외증권', buyAmount:46077 },
+      { accountId:1, name:'X-에너지', qty:1, curPrice:21560, evalAmount:32615, type:'해외증권', buyAmount:45674 },
+      // 일반 계좌 2
+      { accountId:2, name:'삼성전자', qty:30, curPrice:362500, evalAmount:10875000, type:'주식', buyAmount:1641000 },
+      { accountId:2, name:'삼성미국S&P500인덱스증권자투자H(주)-Ce', qty:26443, curPrice:3078, evalAmount:81396, type:'수익증권', buyAmount:69677 },
+      { accountId:2, name:'AST 스페이스모바일', qty:62, curPrice:80660, evalAmount:7565391, type:'해외증권', buyAmount:5120151 },
+      { accountId:2, name:'TRDR 2X ASTS ETF', qty:200, curPrice:24265, evalAmount:7341618, type:'해외증권', buyAmount:7613913 },
+      { accountId:2, name:'셀레스티카', qty:20, curPrice:372550, evalAmount:11271872, type:'해외증권', buyAmount:4450910 },
+      { accountId:2, name:'TRDR 2X CRDO ETF', qty:39, curPrice:99410, evalAmount:5865110, type:'해외증권', buyAmount:962096 },
+      { accountId:2, name:'TT DF 2XIREN ETF', qty:81, curPrice:29850, evalAmount:3657723, type:'해외증권', buyAmount:1931312 },
+      { accountId:2, name:'아이렌', qty:100, curPrice:59960, evalAmount:9070748, type:'해외증권', buyAmount:5285207 },
+      { accountId:2, name:'팔란티어 테크놀로지스', qty:102, curPrice:128470, evalAmount:19823640, type:'해외증권', buyAmount:15675163 },
+      // ISA
+      { accountId:3, name:'SOL 팔란티어커버드콜OTM채권혼합', qty:2008, curPrice:8410, evalAmount:16887280, type:'주식', buyAmount:2014024 },
+      { accountId:3, name:'삼성전자', qty:15, curPrice:362500, evalAmount:5437500, type:'주식', buyAmount:967500 },
+      { accountId:3, name:'PLUS 자사주매입고배당주', qty:31, curPrice:12800, evalAmount:396800, type:'주식', buyAmount:341961 },
+      { accountId:3, name:'ACE 미국AI테크핵심산업액티브', qty:909, curPrice:10200, evalAmount:9271800, type:'주식', buyAmount:7576515 },
+      { accountId:3, name:'SOL 200타겟위클리커버드콜', qty:1995, curPrice:16485, evalAmount:32887575, type:'주식', buyAmount:27808305 },
+      { accountId:3, name:'KODEX 미국우주항공', qty:238, curPrice:11965, evalAmount:2847670, type:'주식', buyAmount:2683884 },
+      { accountId:3, name:'TIGER 현대차그룹플러스', qty:15, curPrice:64545, evalAmount:968175, type:'주식', buyAmount:861000 },
+      { accountId:3, name:'KODEX 미국나스닥100', qty:4, curPrice:30425, evalAmount:121700, type:'주식', buyAmount:91388 },
+      { accountId:3, name:'TIGER 미국테크TOP10타겟커버드콜', qty:304, curPrice:15995, evalAmount:4862480, type:'주식', buyAmount:3885728 },
+      { accountId:3, name:'KODEX 테슬라커버드콜채권혼합액티브', qty:1401, curPrice:8530, evalAmount:11950530, type:'주식', buyAmount:13249257 },
+      { accountId:3, name:'RISE 200위클리커버드콜', qty:1485, curPrice:16040, evalAmount:23819400, type:'주식', buyAmount:14374800 },
+      { accountId:3, name:'ACE 미국빅테크7+데일리타겟커버드콜(합성)', qty:329, curPrice:12195, evalAmount:4012155, type:'주식', buyAmount:4119080 },
+      { accountId:3, name:'TIGER 미국S&P500타겟데일리커버드콜', qty:354, curPrice:13000, evalAmount:4602000, type:'주식', buyAmount:3640182 },
+      { accountId:3, name:'KODEX 200타겟위클리커버드콜', qty:590, curPrice:28270, evalAmount:16679300, type:'주식', buyAmount:10741540 },
+      { accountId:3, name:'KODEX 금융고배당TOP10타겟위클리커버드콜', qty:1542, curPrice:11960, evalAmount:18442320, type:'주식', buyAmount:19290420 },
+      // 연금저축 1
+      { accountId:5, name:'SOL 팔란티어미국채커버드콜혼합', qty:90, curPrice:9945, evalAmount:895050, type:'주식', buyAmount:1044090 },
+      { accountId:5, name:'SOL 팔란티어커버드콜OTM채권혼합', qty:1622, curPrice:8410, evalAmount:13641020, type:'주식', buyAmount:16174584 },
+      { accountId:5, name:'ACE 미국AI테크핵심산업액티브', qty:453, curPrice:10200, evalAmount:4620600, type:'주식', buyAmount:0 },
+      { accountId:5, name:'SOL 200타겟위클리커버드콜', qty:108, curPrice:16485, evalAmount:1780380, type:'주식', buyAmount:1331748 },
+      { accountId:5, name:'KODEX 미국우주항공', qty:45, curPrice:11965, evalAmount:538425, type:'주식', buyAmount:461430 },
+      { accountId:5, name:'TIGER 현대차그룹플러스', qty:253, curPrice:64545, evalAmount:16329885, type:'주식', buyAmount:17380594 },
+      { accountId:5, name:'KODEX 미국나스닥100', qty:26, curPrice:30425, evalAmount:791050, type:'주식', buyAmount:549718 },
+      { accountId:5, name:'ACE KRX금현물', qty:11, curPrice:29005, evalAmount:319055, type:'주식', buyAmount:343310 },
+      { accountId:5, name:'KODEX 미국배당커버드콜액티브', qty:206, curPrice:13545, evalAmount:2790270, type:'주식', buyAmount:2313380 },
+      { accountId:5, name:'TIGER 미국테크TOP10타겟커버드콜', qty:420, curPrice:15995, evalAmount:6717900, type:'주식', buyAmount:4872420 },
+      { accountId:5, name:'KODEX 테슬라커버드콜채권혼합액티브', qty:999, curPrice:8530, evalAmount:8521470, type:'주식', buyAmount:9219771 },
+      { accountId:5, name:'RISE 200위클리커버드콜', qty:863, curPrice:16040, evalAmount:13842520, type:'주식', buyAmount:8094940 },
+      { accountId:5, name:'ACE 미국빅테크7+데일리타겟커버드콜(합성)', qty:2, curPrice:12195, evalAmount:24390, type:'주식', buyAmount:24974 },
+      { accountId:5, name:'TIGER 미국S&P500타겟데일리커버드콜', qty:426, curPrice:13000, evalAmount:5538000, type:'주식', buyAmount:4325178 },
+      { accountId:5, name:'KODEX 미국나스닥100데일리커버드콜OTM', qty:468, curPrice:10935, evalAmount:5117580, type:'주식', buyAmount:4827420 },
+      { accountId:5, name:'KODEX 200타겟위클리커버드콜', qty:1002, curPrice:28270, evalAmount:28326540, type:'주식', buyAmount:19288500 },
+      { accountId:5, name:'KODEX 금융고배당TOP10타겟위클리커버드콜', qty:1330, curPrice:11960, evalAmount:15906800, type:'주식', buyAmount:16176790 },
+      { accountId:5, name:'삼성신종종류형MMF제4호-CP', qty:549948, curPrice:1010, evalAmount:555936, type:'수익증권', buyAmount:555878 },
+      // 연금저축 2
+      { accountId:6, name:'SOL 팔란티어미국채커버드콜혼합', qty:748, curPrice:9945, evalAmount:7438860, type:'주식', buyAmount:8838368 },
+      { accountId:6, name:'SOL 팔란티어커버드콜OTM채권혼합', qty:355, curPrice:8410, evalAmount:2985550, type:'주식', buyAmount:3421135 },
+      { accountId:6, name:'ACE 미국AI테크핵심산업액티브', qty:30, curPrice:10200, evalAmount:306000, type:'주식', buyAmount:273330 },
+      { accountId:6, name:'SOL 200타겟위클리커버드콜', qty:58, curPrice:16485, evalAmount:956130, type:'주식', buyAmount:719896 },
+      { accountId:6, name:'KODEX 미국우주항공', qty:12, curPrice:11965, evalAmount:143580, type:'주식', buyAmount:119592 },
+      { accountId:6, name:'KODEX 미국나스닥100', qty:440, curPrice:30425, evalAmount:13387000, type:'주식', buyAmount:8350760 },
+      { accountId:6, name:'ACE KRX금현물', qty:32, curPrice:29005, evalAmount:928160, type:'주식', buyAmount:915776 },
+      { accountId:6, name:'KODEX 미국배당커버드콜액티브', qty:567, curPrice:13545, evalAmount:7680015, type:'주식', buyAmount:6341328 },
+      { accountId:6, name:'KODEX 테슬라커버드콜채권혼합액티브', qty:12, curPrice:8530, evalAmount:102360, type:'주식', buyAmount:107544 },
+      { accountId:6, name:'RISE 200위클리커버드콜', qty:101, curPrice:16040, evalAmount:1620040, type:'주식', buyAmount:948390 },
+      { accountId:6, name:'ACE 미국빅테크7+데일리타겟커버드콜(합성)', qty:806, curPrice:12195, evalAmount:9829170, type:'주식', buyAmount:10074194 },
+      { accountId:6, name:'KODEX 200타겟위클리커버드콜', qty:577, curPrice:28270, evalAmount:16311790, type:'주식', buyAmount:9544157 },
+      { accountId:6, name:'삼성신종종류형MMF제4호-CP', qty:590089, curPrice:1010, evalAmount:596515, type:'수익증권', buyAmount:596504 },
+      // 연금저축 3
+      { accountId:7, name:'SOL 팔란티어미국채커버드콜혼합', qty:39, curPrice:9945, evalAmount:387855, type:'주식', buyAmount:453219 },
+      { accountId:7, name:'ACE 미국AI테크핵심산업액티브', qty:2, curPrice:10200, evalAmount:20400, type:'주식', buyAmount:16934 },
+      { accountId:7, name:'SOL 200타겟위클리커버드콜', qty:165, curPrice:16485, evalAmount:2720025, type:'주식', buyAmount:2267760 },
+      { accountId:7, name:'KODEX 미국우주항공', qty:16, curPrice:11965, evalAmount:191440, type:'주식', buyAmount:166048 },
+      { accountId:7, name:'KODEX 미국S&P500', qty:17, curPrice:25830, evalAmount:439110, type:'주식', buyAmount:278613 },
+      { accountId:7, name:'KODEX 미국나스닥100', qty:10, curPrice:30425, evalAmount:304250, type:'주식', buyAmount:210890 },
+      { accountId:7, name:'TIGER 미국테크TOP10타겟커버드콜', qty:41, curPrice:15995, evalAmount:655795, type:'주식', buyAmount:491262 },
+      { accountId:7, name:'KODEX 테슬라커버드콜채권혼합액티브', qty:337, curPrice:8530, evalAmount:2874610, type:'주식', buyAmount:3133763 },
+      { accountId:7, name:'RISE 200위클리커버드콜', qty:86, curPrice:16040, evalAmount:1379440, type:'주식', buyAmount:749490 },
+      { accountId:7, name:'ACE 미국빅테크7+데일리타겟커버드콜(합성)', qty:4, curPrice:12195, evalAmount:48780, type:'주식', buyAmount:46960 },
+      { accountId:7, name:'TIGER 미국S&P500타겟데일리커버드콜', qty:239, curPrice:13000, evalAmount:3107000, type:'주식', buyAmount:2515714 },
+      { accountId:7, name:'KODEX 미국나스닥100데일리커버드콜OTM', qty:208, curPrice:10935, evalAmount:2274480, type:'주식', buyAmount:2111408 },
+      { accountId:7, name:'KODEX 200타겟위클리커버드콜', qty:135, curPrice:28270, evalAmount:3816450, type:'주식', buyAmount:2251935 },
+      { accountId:7, name:'KODEX 금융고배당TOP10타겟위클리커버드콜', qty:768, curPrice:11960, evalAmount:9185280, type:'주식', buyAmount:9502464 },
+      { accountId:7, name:'삼성신종종류형MMF제4호-CP', qty:336069, curPrice:1010, evalAmount:339728, type:'수익증권', buyAmount:339597 },
+      // IRP
+      { accountId:4, name:'TIGER 현대차그룹플러스', qty:11, curPrice:1095000, evalAmount:709995, type:'주식', buyAmount:638150 },
+      { accountId:4, name:'KODEX 미국S&P500', qty:9, curPrice:131715, evalAmount:232470, type:'주식', buyAmount:131715 },
+      { accountId:4, name:'KODEX 미국배당커버드콜액티브', qty:227, curPrice:2555145, evalAmount:3074715, type:'주식', buyAmount:2555145 },
+      { accountId:4, name:'RISE 글로벌자산배분액티브', qty:24, curPrice:345915, evalAmount:363360, type:'주식', buyAmount:345915 },
+      { accountId:4, name:'TIGER 미국테크TOP10타겟커버드콜', qty:235, curPrice:2771720, evalAmount:3758825, type:'주식', buyAmount:2771720 },
+      { accountId:4, name:'KODEX 테슬라커버드콜채권혼합액티브', qty:895, curPrice:8190800, evalAmount:7634350, type:'주식', buyAmount:8190800 },
+      { accountId:4, name:'RISE 200위클리커버드콜', qty:465, curPrice:3692810, evalAmount:7458600, type:'주식', buyAmount:3692810 },
+      { accountId:4, name:'ACE 미국빅테크7+데일리타겟커버드콜(합성)', qty:304, curPrice:3845600, evalAmount:3707280, type:'주식', buyAmount:3845600 },
+      { accountId:4, name:'KODEX 200타겟위클리커버드콜', qty:27, curPrice:441270, evalAmount:763290, type:'주식', buyAmount:441270 },
+      { accountId:4, name:'KODEX 금융고배당TOP10타겟커버드콜', qty:664, curPrice:8318115, evalAmount:7941440, type:'주식', buyAmount:8318115 },
+      { accountId:4, name:'SOL 팔란티어커버드콜OTM채권혼합', qty:989, curPrice:9666960, evalAmount:8317490, type:'주식', buyAmount:9666960 },
+      { accountId:4, name:'SOL 팔란티어미국채커버드콜혼합', qty:31, curPrice:356345, evalAmount:308295, type:'주식', buyAmount:356345 },
+      { accountId:4, name:'SOL 200타겟위클리커버드콜', qty:69, curPrice:939865, evalAmount:1137465, type:'주식', buyAmount:939865 },
+      { accountId:4, name:'현금성자산(삼성증권)', qty:185802, curPrice:185802, evalAmount:185802, type:'수익증권', buyAmount:185802 },
+      { accountId:4, name:'삼성증권 디폴트옵션 안정자산형', qty:0, curPrice:0, evalAmount:4388, type:'수익증권', buyAmount:0 },
+    ];
+
+    let stocks = [];
+    let dividends = [];
+    let deposits = [];
+    let trades = [];
+    let snapshots = [];
+    let exchangeRate = 1512.8;
+
+    let accountPieChart = null, stockPieChart = null, pnlChart = null, divChart = null, stockDivChart = null, accDivChart = null;
+    let activeDividends = [];
+    const STORAGE_KEY = 'stock_dashboard_v3';
+
+    document.addEventListener('DOMContentLoaded', function() {
+      // ?reset=1 파라미터로 localStorage 초기화
+      if (window.location.search.includes('reset')) {
+        localStorage.removeItem(STORAGE_KEY);
+        window.history.replaceState({}, '', window.location.pathname);
+      }
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        // 저장된 데이터(매수가 포함) 복원
+        loadFromStorage();
+      } else {
+        // 최초 실행: 기본 잔고 데이터 로드
+        stocks = DEFAULT_STOCKS.map(s => ({
+          ...s,
+          id: 'init_' + s.accountId + '_' + Date.now() + '_' + Math.random().toString(36).slice(2,6)
+        }));
+      }
+      // 기준일 스냅샷 없으면 DEFAULT_STOCKS 기준으로 초기 생성
+      if (!snapshots.some(s => s.type === '기준일')) {
+        const baseEval = DEFAULT_STOCKS.reduce((s,x) => s + (x.evalAmount||0), 0);
+        const baseInvested = DEFAULT_STOCKS.reduce((s,x) => s + (x.buyAmount||0), 0);
+        snapshots.unshift({ date:'2026-06-19', time:'12:50', type:'기준일', totalEval:baseEval, totalInvested:baseInvested, totalDiv:0 });
+      }
+      saveToStorage();
+      setupDropZones();
+      updateAll();
+      checkAutoSnapshot();
+    });
+
+    function saveToStorage() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ stocks, dividends, deposits, trades, snapshots, exchangeRate }));
+    }
+
+    function loadFromStorage() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          const d = JSON.parse(raw);
+          // stocks 복원 (수동 입력한 매수가 포함)
+          if (d.stocks && d.stocks.length > 0) {
+            stocks = d.stocks;
+          } else {
+            stocks = DEFAULT_STOCKS.map(s => ({
+              ...s,
+              id: 'init_' + s.accountId + '_' + Date.now() + '_' + Math.random().toString(36).slice(2,6)
+            }));
+          }
+          dividends = d.dividends || [];
+          deposits = d.deposits || [];
+          trades = d.trades || [];
+          snapshots = d.snapshots || [];
+          exchangeRate = d.exchangeRate || 1512.8;
+          document.getElementById('exchangeRateInput').value = exchangeRate;
+        }
+      } catch(e) {}
+    }
+
+    function resetData() {
+      if (!confirm('모든 데이터를 초기화하시겠습니까?\n(수동 입력한 매수가도 모두 삭제됩니다)')) return;
+      stocks = DEFAULT_STOCKS.map(s => ({
+        ...s,
+        id: 'init_' + s.accountId + '_' + Date.now() + '_' + Math.random().toString(36).slice(2,6)
+      }));
+      dividends = []; deposits = []; trades = [];
+      snapshots = snapshots.filter(s => s.type === '기준일'); // 기준일 스냅샷은 유지
+      localStorage.removeItem(STORAGE_KEY);
+      saveToStorage();
+      updateAll();
+      document.getElementById('statusText').textContent = '데이터 초기화 완료';
+    }
+
+    function exportData() {
+      const data = { stocks, dividends, deposits, trades, exchangeRate, exportedAt: new Date().toISOString() };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `stock_portfolio_${new Date().toISOString().slice(0,10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function exportCSV() {
+      const today = new Date().toISOString().slice(0,10).replace(/-/g,'');
+      const rows = ['계좌번호,계좌명,종목명,구분,수량,현재가,평가금액,매수단가,매수금액'];
+      stocks.forEach(s => {
+        const acc = ACCOUNTS.find(a => a.id === s.accountId);
+        const accNum = acc ? acc.num : '';
+        const accName = acc ? acc.name : '';
+        const avgBuyPrice = s.qty > 0 ? Math.round((s.buyAmount || 0) / s.qty) : 0;
+        const row = [
+          accNum,
+          accName,
+          `"${s.name}"`,
+          s.type || '주식',
+          s.qty,
+          s.curPrice || 0,
+          s.evalAmount || 0,
+          avgBuyPrice,
+          s.buyAmount || 0
+        ].join(',');
+        rows.push(row);
+      });
+      const csvContent = rows.join('\n');
+      const BOM = '﻿';
+      const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `stock_all_${today}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function switchTab(name) {
+      document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
+      document.querySelectorAll('.tab-button').forEach(b => {
+        b.classList.remove('tab-active'); b.classList.add('tab-inactive');
+      });
+      document.getElementById(name).classList.remove('hidden');
+      document.querySelector(`[data-tab="${name}"]`).classList.add('tab-active');
+      document.querySelector(`[data-tab="${name}"]`).classList.remove('tab-inactive');
+      setTimeout(() => {
+        if (name === 'dashboard') { renderAccountPieChart(); renderStockPieChart(); renderPnlChart(); }
+        if (name === 'dividends') renderDividendChart();
+      }, 100);
+    }
+
+    function setupDropZones() {
+      const dzCSV = document.getElementById('dropZoneCSV');
+      const fiCSV = document.getElementById('csvFileInput');
+      dzCSV.addEventListener('click', () => fiCSV.click());
+      dzCSV.addEventListener('dragover', e => { e.preventDefault(); dzCSV.classList.add('drag-over'); });
+      dzCSV.addEventListener('dragleave', () => dzCSV.classList.remove('drag-over'));
+      dzCSV.addEventListener('drop', e => {
+        e.preventDefault(); dzCSV.classList.remove('drag-over');
+        if (e.dataTransfer.files.length > 0) handleCSVFiles(e.dataTransfer.files);
+      });
+
+      const dz = document.getElementById('dropZone');
+      const fi = document.getElementById('fileInput');
+      dz.addEventListener('click', () => fi.click());
+      dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+      dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+      dz.addEventListener('drop', e => {
+        e.preventDefault(); dz.classList.remove('drag-over');
+        if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+      });
+    }
+
+    // CSV
+    function csvLog(msg) {
+      const el = document.getElementById('csvLog');
+      el.textContent += msg + '\n';
+      el.scrollTop = el.scrollHeight;
+    }
+    function loadAllCSV() {
+      csvLog('CSV 불러오는 중...');
+      loadCSV('70714801_일반계좌1.csv', 1);
+      loadCSV('70871601_일반계좌2.csv', 2);
+      loadCSV('71297814_ISA.csv', 3);
+      loadCSV('71462515_연금저축1.csv', 5);
+      loadCSV('71615215_연금저축2.csv', 6);
+      loadCSV('70868215_연금저축3.csv', 7);
+    }
+    function loadCSV(filename, accountId) {
+      csvLog(`CSV 로드: ${filename}`);
+      fetch(filename).then(res => {
+        if (!res.ok) throw new Error('파일 없음');
+        return res.text();
+      }).then(text => {
+        parseCSV(text, accountId);
+        csvLog(`완료: ${filename}`);
+        saveToStorage();
+        updateAll();
+      }).catch(err => csvLog(`실패: ${err.message}`));
+    }
+    function handleCSVSelect(e) {
+      if (e.target.files.length > 0) handleCSVFiles(e.target.files);
+    }
+    function handleCSVFiles(files) {
+      csvLog(`${files.length}개 CSV 처리 시작`);
+      Array.from(files).forEach(file => {
+        const reader = new FileReader();
+        reader.onload = e => {
+          const text = e.target.result;
+          const name = file.name.toLowerCase();
+          let accountId = null;
+          if (name.includes('70714') || name.includes('일반계좌1')) accountId = 1;
+          else if (name.includes('70871') && (name.includes('일반계좌2') || name.includes('70871601'))) accountId = 2;
+          else if (name.includes('71297') || name.includes('isa')) accountId = 3;
+          else if (name.includes('71462') || name.includes('연금저축1')) accountId = 5;
+          else if (name.includes('71615') || name.includes('연금저축2')) accountId = 6;
+          else if (name.includes('70868') || name.includes('연금저축3')) accountId = 7;
+          if (accountId) {
+            parseCSV(text, accountId);
+            csvLog(`성공: ${file.name}`);
+          } else {
+            csvLog(`건너뜀: ${file.name}`);
+          }
+          saveToStorage();
+          updateAll();
+        };
+        reader.readAsText(file);
+      });
+    }
+    function parseCSV(text, accountId) {
+      const lines = text.split('\n');
+      let parsing = false;
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (line.includes('유가증권 상세내역')) { parsing = true; continue; }
+        if (!parsing) continue;
+        if (line.includes('수량단위') || line.includes('■')) { parsing = false; break; }
+        if (line.includes('계좌번호') || line.includes('종목명') || line.length < 10) continue;
+        const cols = line.split(',');
+        if (cols.length < 6) continue;
+        let stockName = cols[1] ? cols[1].trim().replace(/"/g, '') : '';
+        let type = cols[2] ? cols[2].trim().replace(/"/g, '') : '주식';
+        let qty = parseFloat((cols[3] || '0').replace(/"/g, '').replace(/,/g, ''));
+        let curPrice = parseInt((cols[4] || '0').replace(/"/g, '').replace(/,/g, ''));
+        let evalAmount = parseInt((cols[5] || '0').replace(/"/g, '').replace(/,/g, ''));
+        let buyAmount = parseInt((cols[6] || '0').replace(/"/g, '').replace(/,/g, ''));
+        if (!stockName || qty <= 0) continue;
+        if (type === '해외증권' && curPrice < 1000 && evalAmount > 0 && qty > 0) {
+          curPrice = Math.round(evalAmount / qty);
+        }
+        if (type === '수익증권' && evalAmount > 0 && qty > 0) {
+          curPrice = Math.round(evalAmount / qty);
+        }
+        const existing = stocks.find(s => s.accountId === accountId && s.name === stockName);
+        if (existing) {
+          existing.qty = qty; existing.curPrice = curPrice; existing.evalAmount = evalAmount; existing.buyAmount = buyAmount; existing.type = type;
+        } else {
+          stocks.push({
+            id: 'csv_' + accountId + '_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+            accountId, name: stockName, qty, price: buyAmount > 0 ? buyAmount : 0, curPrice, evalAmount, buyAmount, type
+          });
+        }
+      }
+    }
+
+    // TXT Parser
+    function log(msg) {
+      const el = document.getElementById('importLog');
+      el.textContent += msg + '\n';
+      el.scrollTop = el.scrollHeight;
+    }
+    function autoLoadFile() {
+      fetch('KakaoTalkChats_260619_1400.txt').then(res => {
+        if (!res.ok) throw new Error('KakaoTalkChats_260619_1400.txt 없음');
+        return res.text();
+      }).then(text => {
+        parseContent(text);
+        switchTab('dashboard');
+      }).catch(err => alert(err.message));
+    }
+    function handleFileSelect(e) {
+      if (e.target.files[0]) handleFile(e.target.files[0]);
+    }
+    function handleFile(file) {
+      const reader = new FileReader();
+      reader.onload = e => parseContent(e.target.result);
+      reader.readAsText(file);
+    }
+    function parseContent(content) {
+      // 현재 stocks 백업 (기본값 + 이전 카톡 반영분)
+      const baseStocks = JSON.parse(JSON.stringify(stocks));
+      const baseDividends = JSON.parse(JSON.stringify(dividends));
+      
+      const lines = content.split('\n');
+      let newStocks = []; let newDividends = []; let newDeposits = []; let newTrades = [];
+      let tCnt = 0, dCnt = 0, dpCnt = 0;
+      const EX = exchangeRate;
+      const DIV_CUTOFF = '2025-01-01';  // 배당: 2025년 이후 전체
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        let currentDate = '';
+        const dm = line.match(/^(\d{4})년\s+(\d+)월\s+(\d+)일/);
+        if (dm) currentDate = `${dm[1]}-${String(parseInt(dm[2])).padStart(2,'0')}-${String(parseInt(dm[3])).padStart(2,'0')}`;
+
+        // 국내 매수/매도 (12:50 이후만)
+        if ((line.startsWith('매수') || line.startsWith('매도')) && line.includes('주') && line.includes('원')) {
+          const m = line.match(/^(매수|매도)\s*(\d+)\s*주\s+([\d,]+)\s*원/);
+          if (!m) continue;
+          const type = m[1], qty = parseInt(m[2]), price = parseInt(m[3].replace(/,/g, ''));
+          let msgLine = null, tradeDate = currentDate;
+          for (let j = i - 1; j >= Math.max(0, i - 5); j--) {
+            if (lines[j].includes('주식체결안내')) { msgLine = lines[j]; break; }
+          }
+          if (!msgLine) continue;
+          let tradeTime = '99:99';
+          const dtM = msgLine.match(/(\d{4})년\s+(\d+)월\s+(\d+)일\s+(오전|오후)\s+(\d+):(\d+)/);
+          if (dtM) {
+            tradeDate = `${dtM[1]}-${String(parseInt(dtM[2])).padStart(2,'0')}-${String(parseInt(dtM[3])).padStart(2,'0')}`;
+            let h = parseInt(dtM[5]);
+            if (dtM[4] === '오후' && h !== 12) h += 12;
+            if (dtM[4] === '오전' && h === 12) h = 0;
+            tradeTime = `${String(h).padStart(2,'0')}:${String(dtM[6]).padStart(2,'0')}`;
+          }
+          // 기준 스냅샷(2026-06-19 12:50) 이후 거래만 반영
+          if (tradeDate < '2026-06-19') continue;
+          if (tradeDate === '2026-06-19' && tradeTime < '12:50') continue;
+          const accM = msgLine.match(/(\d{5})\*+/);
+          const stockM = msgLine.match(/\d{5}\*+.*?\s+(.+)$/);
+          if (!accM || !stockM) continue;
+          const acc = accM[1];
+          let stockName = stockM[1].trim().replace(/^-\s*\d+\s*/, '').trim();
+          stockName = stockName.replace(/\s*(매수|매도)\s*\d+\s*주.*$/, '').trim();
+          stockName = stockName.replace(/\s*\(\d+차\)\s*$/, '').trim();
+          let account = ACCOUNTS.find(a => a.num === acc);
+          if (!account) {
+            for (let k = Math.max(0, i - 3); k <= i + 1; k++) {
+              if ((lines[k]||'').includes('IRP') || (lines[k]||'').includes('퇴직연금')) {
+                if (acc === '70714') account = ACCOUNTS.find(a => a.id === 4);
+                break;
+              }
+            }
+          }
+          if (!account) continue;
+          newTrades.push({ accountId: account.id, stockName, type, qty, price, date: tradeDate, total: qty*price });
+          let stock = newStocks.find(s => s.name === stockName && s.accountId === account.id);
+          if (stock) {
+            if (type === '매수') { 
+              const oldTotal = stock.price * stock.qty; 
+              stock.qty += qty; 
+              stock.price = Math.round((oldTotal + qty*price) / stock.qty);
+              stock.buyAmount = stock.price * stock.qty; 
+            } else { 
+              stock.qty = Math.max(0, stock.qty - qty); 
+              if (stock.qty === 0) newStocks = newStocks.filter(s => s !== stock);
+              else stock.buyAmount = stock.price * stock.qty;
+            }
+          } else if (type === '매수') {
+            newStocks.push({ id: 'txt_'+Date.now()+'_'+Math.random().toString(36).slice(2,6), accountId: account.id, name: stockName, qty, price, buyAmount: qty*price });
+          }
+          tCnt++;
+        }
+
+        // 해외 매수/매도 (2026-06-19 12:50 이후만)
+        if (line.includes('체결가격') && line.includes('USD')) {
+          const pm = line.match(/:\s*([\d.]+)\s*USD/);
+          if (!pm) continue;
+          const usd = parseFloat(pm[1]), priceKRW = Math.round(usd * EX);
+          let stockName = '', qty = 0, accNum = '', tradeType = '매수', tradeDate = currentDate, tradeTime = '99:99';
+          for (let j = Math.max(0, i - 20); j < Math.min(lines.length, i + 10); j++) {
+            const ck = lines[j].trim();
+            if (!stockName && ck.includes('종목명')) { const sm = ck.match(/:\s*(.+?)(?:\s*$|종목코드)/); if (sm) stockName = sm[1].trim(); }
+            if (qty === 0 && (ck.includes('체결수량') || ck.includes('주문수량'))) { const qm = ck.match(/:\s*(\d+)\s*주/); if (qm) qty = parseInt(qm[1]); }
+            if (!accNum && ck.includes('계좌번호')) { const am = ck.match(/(\d{5})\*+/); if (am) accNum = am[1]; }
+            if (ck.includes('매도')) tradeType = '매도';
+            const dtFull = ck.match(/(\d{4})년\s+(\d+)월\s+(\d+)일\s+(오전|오후)\s+(\d+):(\d+)/);
+            if (dtFull) {
+              tradeDate = `${dtFull[1]}-${String(parseInt(dtFull[2])).padStart(2,'0')}-${String(parseInt(dtFull[3])).padStart(2,'0')}`;
+              let h = parseInt(dtFull[5]);
+              if (dtFull[4] === '오후' && h !== 12) h += 12;
+              if (dtFull[4] === '오전' && h === 12) h = 0;
+              tradeTime = `${String(h).padStart(2,'0')}:${String(dtFull[6]).padStart(2,'0')}`;
+            } else {
+              const df = ck.match(/(\d{4})년\s+(\d+)월\s+(\d+)일/);
+              if (df) tradeDate = `${df[1]}-${String(parseInt(df[2])).padStart(2,'0')}-${String(parseInt(df[3])).padStart(2,'0')}`;
+            }
+          }
+          if (tradeDate < '2026-06-19') continue;
+          if (tradeDate === '2026-06-19' && tradeTime < '12:50') continue;
+          if (!stockName || !qty || !accNum) continue;
+          const account = ACCOUNTS.find(a => a.num === accNum);
+          if (!account) continue;
+          newTrades.push({ accountId: account.id, stockName, type: tradeType, qty, price: priceKRW, date: tradeDate, total: qty*priceKRW, isOverseas: true });
+          let stock = newStocks.find(s => s.name === stockName && s.accountId === account.id);
+          if (stock) {
+            if (tradeType === '매수') { 
+              const oldTotal = stock.price * stock.qty; 
+              stock.qty += qty; 
+              stock.price = Math.round((oldTotal + qty*priceKRW) / stock.qty);
+              stock.buyAmount = stock.price * stock.qty; 
+            } else { 
+              stock.qty = Math.max(0, stock.qty - qty); 
+              if (stock.qty === 0) newStocks = newStocks.filter(s => s !== stock);
+              else stock.buyAmount = stock.price * stock.qty;
+            }
+          } else if (tradeType === '매수') {
+            newStocks.push({ id: 'txt_'+Date.now()+'_'+Math.random().toString(36).slice(2,6), accountId: account.id, name: stockName, qty, price: priceKRW, buyAmount: qty*priceKRW });
+          }
+          tCnt++;
+        }
+
+        // 배당금 (세후 분배금액만 파싱, 이중집계 방지)
+        // 탐색 윈도우를 i-8~i+2로 제한: 이전 메시지(~i-14)의 종목명을 잘못 가져오는 버그 방지
+        if ((line.includes('세후 분배금액') || (line.includes('배당금') && !line.includes('세전'))) && line.match(/:\s*[\d.,]+/)) {
+          const am = line.match(/:\s*([\d.,]+)\s*(?:USD|원)?/);
+          if (!am) continue;
+          let amount = line.includes('USD')
+            ? Math.round(parseFloat(am[1].replace(/,/g, '')) * EX)
+            : parseInt(am[1].replace(/,/g, ''));
+          if (amount <= 0) continue;
+          // 세금: 바로 위 1~3줄 탐색
+          let tax = 0;
+          for (let j = Math.max(0, i - 3); j < i; j++) {
+            const taxM = lines[j].trim().match(/세금\s*:\s*([\d,]+)\s*원/);
+            if (taxM) { tax = parseInt(taxM[1].replace(/,/g, '')); break; }
+          }
+          let stockName = '', accNum = '', divDate = currentDate;
+          for (let j = Math.max(0, i - 8); j < Math.min(lines.length, i + 2); j++) {
+            const ck = lines[j].trim();
+            if (!stockName && (ck.includes('종목명') || ck.includes('상품명'))) { const sm = ck.match(/:\s*(.+?)(?:\s*$|-)/); if (sm) stockName = sm[1].trim(); }
+            if (!accNum && ck.includes('계좌번호')) { const am2 = ck.match(/(\d{5})\*+/); if (am2) accNum = am2[1]; }
+            const df = ck.match(/(\d{4})년\s*(\d+)월\s*(\d+)일/);
+            if (df) divDate = `${df[1]}-${String(parseInt(df[2])).padStart(2,'0')}-${String(parseInt(df[3])).padStart(2,'0')}`;
+          }
+          if (!stockName || !accNum) continue;
+          if (divDate < DIV_CUTOFF) continue;
+          const account = ACCOUNTS.find(a => a.num === accNum);
+          if (!account) continue;
+          newDividends.push({ accountId: account.id, stock: stockName, amount, date: divDate, tax });
+          dCnt++;
+        }
+
+        // 퇴직연금 배당 (2025-01-01 이후)
+        if (line.includes('퇴직연금 이자/배당/상환 안내')) {
+          let accNum = '', stockName = '', amount = 0, divDate = currentDate;
+          for (let j = i + 1; j < Math.min(lines.length, i + 8); j++) {
+            const ck = lines[j].trim();
+            if (ck.includes('계좌번호')) { const am = ck.match(/(\d{5})\*+/); if (am) accNum = am[1]; }
+            if (!stockName && ck.includes('상품명')) { const sm = ck.match(/:\s*(.+?)$/); if (sm) stockName = sm[1].trim(); }
+            if (amount === 0 && ck.includes('입금액')) { const am = ck.match(/:\s*([\d,]+)\s*원/); if (am) amount = parseInt(am[1].replace(/,/g, '')); }
+            const df = ck.match(/(\d{4})년\s+(\d+)월\s+(\d+)일/);
+            if (df) divDate = `${df[1]}-${String(parseInt(df[2])).padStart(2,'0')}-${String(parseInt(df[3])).padStart(2,'0')}`;
+          }
+          if (!stockName || !amount || !accNum) continue;
+          if (divDate < DIV_CUTOFF) continue;
+          let account = ACCOUNTS.find(a => a.num === accNum);
+          if (!account && (accNum === '70714' || accNum === '71714')) account = ACCOUNTS.find(a => a.id === 4);
+          if (!account) continue;
+          newDividends.push({ accountId: account.id, stock: stockName, amount, date: divDate, tax: 0 });
+          dCnt++;
+        }
+
+        // 입금
+        if (line.includes('입금됐습니다') || line.includes('계좌에')) {
+          const depM = line.match(/계좌에\s+([\d,]+)\s*원이\s+입금/);
+          if (depM) {
+            const depAmount = parseInt(depM[1].replace(/,/g, ''));
+            let accNum = '', depDate = currentDate;
+            for (let j = Math.max(0, i - 3); j < Math.min(lines.length, i + 3); j++) {
+              const ck = lines[j].trim();
+              if (ck.includes('계좌번호')) { const am = ck.match(/(\d{5})\*+/); if (am) accNum = am[1]; }
+              const df = ck.match(/(\d{4})년\s+(\d+)월\s+(\d+)일/);
+              if (df) depDate = `${df[1]}-${String(parseInt(df[2])).padStart(2,'0')}-${String(parseInt(df[3])).padStart(2,'0')}`;
+            }
+            if (accNum) {
+              const account = ACCOUNTS.find(a => a.num === accNum);
+              if (account) { newDeposits.push({ accountId: account.id, amount: depAmount, date: depDate }); dpCnt++; }
+            }
+          }
+        }
+      }
+
+      // 병합: 기본 stocks + 카톡에서 온 변경분
+      const mergedStocks = JSON.parse(JSON.stringify(baseStocks));
+      newStocks.forEach(ns => {
+        const idx = mergedStocks.findIndex(s => s.accountId === ns.accountId && s.name === ns.name);
+        if (idx >= 0) {
+          mergedStocks[idx] = { ...mergedStocks[idx], ...ns };
+        } else {
+          mergedStocks.push(ns);
+        }
+      });
+      stocks = mergedStocks;
+      
+      // 배당은 누적 (중복 제거)
+      const allDividendKeys = new Set();
+      const mergedDividends = [...baseDividends];
+      newDividends.forEach(nd => {
+        const key = nd.date + '_' + nd.accountId + '_' + nd.stock;
+        if (!allDividendKeys.has(key)) {
+          allDividendKeys.add(key);
+          mergedDividends.push(nd);
+        }
+      });
+      dividends = mergedDividends;
+      
+      deposits = [...baseStocks.filter(s => s.deposits).flatMap(s => s.deposits || []), ...newDeposits];
+      trades = [...newTrades];
+
+      log(`\n파싱 완료!`);
+      log(`거래: ${tCnt}건, 배당: ${dCnt}건, 입금: ${dpCnt}건`);
+      log(`보유 종목: ${stocks.length}개`);
+
+      saveToStorage();
+      updateAll();
+      document.getElementById('statusText').textContent = `완료: 종목 ${stocks.length}, 배당 ${dividends.length}, 거래 ${trades.length}`;
+    }
+
+    // IRP Data Loader
+    function loadIRPData() {
+      const irpStocks = [
+        { name:'TIGER 현대차그룹플러스', type:'주식', qty:11, buy:638150, eval:709995 },
+        { name:'KODEX 미국S&P500', type:'주식', qty:9, buy:131715, eval:232470 },
+        { name:'KODEX 미국배당커버드콜액티브', type:'주식', qty:227, buy:2555145, eval:3074715 },
+        { name:'RISE 글로벌자산배분액티브', type:'주식', qty:24, buy:345915, eval:363360 },
+        { name:'TIGER 미국테크TOP10타겟커버드콜', type:'주식', qty:235, buy:2771720, eval:3758825 },
+        { name:'KODEX 테슬라커버드콜채권혼합액티브', type:'주식', qty:895, buy:8190800, eval:7634350 },
+        { name:'RISE 200위클리커버드콜', type:'주식', qty:465, buy:3692810, eval:7458600 },
+        { name:'ACE 미국빅테크7+데일리타겟커버드콜(합성)', type:'주식', qty:304, buy:3845600, eval:3707280 },
+        { name:'KODEX 200타겟위클리커버드콜', type:'주식', qty:27, buy:441270, eval:763290 },
+        { name:'KODEX 금융고배당TOP10타겟커버드콜', type:'주식', qty:664, buy:8318115, eval:7941440 },
+        { name:'SOL 팔란티어커버드콜OTM채권혼합', type:'주식', qty:989, buy:9666960, eval:8317490 },
+        { name:'SOL 팔란티어미국채커버드콜혼합', type:'주식', qty:31, buy:356345, eval:308295 },
+        { name:'SOL 200타겟위클리커버드콜', type:'주식', qty:69, buy:939865, eval:1137465 },
+        { name:'현금성자산(삼성증권)', type:'수익증권', qty:185802, buy:185802, eval:185802 },
+        { name:'삼성증권 디폴트옵션 안정자산형', type:'수익증권', qty:0, buy:0, eval:4388 }
+      ];
+
+      stocks = stocks.filter(s => s.accountId !== 4);
+      irpStocks.forEach(item => {
+        const cur = item.qty > 0 ? Math.round(item.buy / item.qty) : 0;
+        stocks.push({
+          id: 'irp_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),
+          accountId: 4,
+          name: item.name,
+          qty: item.qty,
+          price: cur,
+          curPrice: cur,
+          evalAmount: item.eval,
+          buyAmount: item.buy,
+          type: item.type
+        });
+      });
+      saveToStorage();
+      updateAll();
+      alert('IRP 계좌 업데이트 완료');
+    }
+
+    // UI Updates
+    function updateAll() {
+      const totalEval = stocks.reduce((sum, s) => sum + (s.evalAmount || 0), 0);
+      const totalInvested = stocks.reduce((sum, s) => {
+        const buyAmt = s.buyAmount || 0;
+        return sum + buyAmt;
+      }, 0);
+      const totalPnL = totalEval - totalInvested;
+
+      // 보유 종목 기준 배당만 집계
+      const currentStockNames = new Set(stocks.map(s => s.name));
+      activeDividends = dividends.filter(d => currentStockNames.has(d.stock));
+
+      const totalDiv = activeDividends.reduce((sum, d) => sum + d.amount, 0);
+
+      // 연간 배당 (최근 12개월)
+      const cutoff12m = new Date(); cutoff12m.setFullYear(cutoff12m.getFullYear() - 1);
+      const cutoff12mStr = cutoff12m.toISOString().slice(0, 10);
+      const annualDiv = activeDividends.filter(d => d.date >= cutoff12mStr).reduce((sum, d) => sum + d.amount, 0);
+
+      // 납부 세금 합계
+      const totalTax = activeDividends.reduce((sum, d) => sum + (d.tax || 0), 0);
+
+      // 포트폴리오 배당수익률 = 총 배당 / 총 매수금액 × 100
+      const portDivYield = totalInvested > 0 ? ((totalDiv / totalInvested) * 100).toFixed(2) : '0.00';
+
+      document.getElementById('totalEval').textContent = `₩${totalEval.toLocaleString()}`;
+      document.getElementById('totalStocks').textContent = stocks.length;
+      document.getElementById('totalInvested').textContent = `₩${totalInvested.toLocaleString()}`;
+      document.getElementById('totalPnL').innerHTML = totalPnL >= 0 ? `₩${totalPnL.toLocaleString()} <span class="profit">+${((totalPnL/totalInvested)*100).toFixed(1)}%</span>` : `<span class="loss">₩${totalPnL.toLocaleString()}</span>`;
+      document.getElementById('totalDiv').textContent = `₩${totalDiv.toLocaleString()}`;
+      document.getElementById('annualDiv').textContent = `₩${annualDiv.toLocaleString()}`;
+      document.getElementById('totalTax').textContent = `₩${totalTax.toLocaleString()}`;
+      document.getElementById('portDivYield').textContent = `${portDivYield}%`;
+      renderAccountsSummary();
+      renderPortfolio();
+      renderDividends();
+      renderAccountPieChart();
+      renderStockPieChart();
+      renderPnlChart();
+      renderDividendChart();
+      renderStockDivChart();
+      renderAccDivChart();
+      renderReturns();
+    }
+
+    function renderAccountsSummary() {
+      document.getElementById('accountsSummary').innerHTML = ACCOUNTS.map(acc => {
+        const s = stocks.filter(x => x.accountId === acc.id);
+        const evalAmt = s.reduce((sum, x) => sum + (x.evalAmount || 0), 0);
+        const pct = stocks.reduce((a,b)=>a+(b.evalAmount||0),0) > 0 ? (evalAmt / stocks.reduce((a,b)=>a+(b.evalAmount||0),0) * 100) : 0;
+        return `<div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-[#E5E7EB]">
+          <div><p class="text-sm font-medium">${acc.name} <span class="text-xs text-gray-400 font-normal">(${acc.acctNum})</span></p><p class="text-xs text-gray-400">${s.length}개 종목</p></div>
+          <div class="text-right"><p class="text-sm font-semibold">₩${evalAmt.toLocaleString()}</p><p class="text-xs text-gray-400">${pct.toFixed(1)}%</p></div>
+        </div>`;
+      }).join('');
+    }
+
+    function renderPortfolio() {
+      // 종목별 배당 합계 맵 (accountId+name 기준)
+      const divMap = {};
+      activeDividends.forEach(d => {
+        const key = d.accountId + '_' + d.stock;
+        divMap[key] = (divMap[key] || 0) + d.amount;
+      });
+      document.getElementById('portfolioList').innerHTML = ACCOUNTS.map(acc => {
+        const s = stocks.filter(x => x.accountId === acc.id);
+        const rows = s.map(x => {
+          const avgBuyPrice = x.qty > 0 ? Math.round((x.buyAmount || 0) / x.qty) : 0;
+          const divTotal = divMap[x.accountId + '_' + x.name] || 0;
+          const divYield = (x.buyAmount || 0) > 0 ? ((divTotal / x.buyAmount) * 100).toFixed(2) + '%' : '-';
+          return `<tr>
+            <td class="font-medium">${x.name || '-'}</td>
+            <td class="text-right">${x.qty || 0}</td>
+            <td class="text-right">₩${(x.curPrice || 0).toLocaleString()}</td>
+            <td class="text-right">₩${(x.evalAmount || 0).toLocaleString()}</td>
+            <td class="text-right">₩${avgBuyPrice.toLocaleString()}</td>
+            <td class="text-right">₩${(x.buyAmount || 0).toLocaleString()}</td>
+            <td class="text-right text-green-600">${divYield}</td>
+            <td class="text-center">
+              <button onclick="editStock('${x.id}')" class="text-[#5B8DEE] hover:underline text-xs mr-2">수정</button>
+              <button onclick="deleteStock('${x.id}')" class="text-red-500 hover:underline text-xs">삭제</button>
+            </td>
+          </tr>`;
+        }).join('');
+        return `<div class="bg-white border border-[#E5E7EB] rounded-lg p-4">
+          <div class="flex justify-between items-center mb-3">
+            <div><p class="text-sm font-semibold">${acc.name} <span class="text-xs text-gray-400 font-normal">(${acc.acctNum})</span></p><p class="text-xs text-gray-400">${s.length}개 종목</p></div>
+            <button onclick="addStock(${acc.id})" class="btn-primary text-xs">+ 추가</button>
+          </div>
+        ${s.length ? `<div class="scroll-table" style="max-height:240px;"><table><tr class="bg-gray-50"><th>종목명</th><th class="text-right">수량</th><th class="text-right">현재가</th><th class="text-right">평가금액</th><th class="text-right">매수가</th><th class="text-right">매수금액</th><th class="text-right">배당수익률</th><th class="text-center">관리</th></tr>${rows}</table></div>` : '<p class="text-gray-400 text-sm">종목 없음</p>'}
+        </div>`;
+      }).join('');
+    }
+
+    // ─── 수익률 관리 ────────────────────────────────────────────
+
+    function getThisWeekMonday() {
+      const now = new Date();
+      const dow = now.getDay(); // 0=Sun
+      const diff = dow === 0 ? -6 : 1 - dow;
+      const m = new Date(now);
+      m.setDate(now.getDate() + diff);
+      return m.toISOString().slice(0, 10);
+    }
+
+    function getPeriodBase(cutoffDate) {
+      // 최신 스냅샷 중 cutoffDate 이전인 것
+      const cands = snapshots.filter(s => s.date < cutoffDate);
+      return cands.length ? cands[cands.length - 1] : null;
+    }
+
+    function saveSnapshot(type) {
+      const now = new Date();
+      const date = now.toISOString().slice(0, 10);
+      const time = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+      const totalEval = stocks.reduce((s, x) => s + (x.evalAmount || 0), 0);
+      const totalInvested = stocks.reduce((s, x) => s + (x.buyAmount || 0), 0);
+      const totalDiv = activeDividends.reduce((s, d) => s + d.amount, 0);
+      // 같은 날짜+타입 중복 방지 (수동 제외)
+      if (type !== '수동' && snapshots.some(s => s.date === date && s.type === type)) return;
+      snapshots.push({ date, time, type, totalEval, totalInvested, totalDiv });
+      snapshots.sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+      saveToStorage();
+      renderReturns();
+      if (type === '수동') alert(`스냅샷 저장 완료 (${date} ${time})`);
+    }
+
+    function checkAutoSnapshot() {
+      const now = new Date();
+      const h = now.getHours(), dow = now.getDay(), dom = now.getDate(), mon = now.getMonth();
+      if (h >= 18) saveSnapshot('일일');
+      if (dow === 1 && h >= 9) saveSnapshot('주간');
+      if (dom === 1 && h >= 9) saveSnapshot('월간');
+      if (mon === 0 && dom === 1 && h >= 9) saveSnapshot('연간');
+    }
+
+    function deleteSnapshot(idx) {
+      snapshots.splice(idx, 1);
+      saveToStorage();
+      renderReturns();
+    }
+
+    function clearSnapshots() {
+      if (!confirm('기준일 스냅샷을 제외한 모든 스냅샷을 삭제하시겠습니까?')) return;
+      snapshots = snapshots.filter(s => s.type === '기준일');
+      saveToStorage();
+      renderReturns();
+    }
+
+    function renderReturns() {
+      const totalEval = stocks.reduce((s, x) => s + (x.evalAmount || 0), 0);
+      const totalInvested = stocks.reduce((s, x) => s + (x.buyAmount || 0), 0);
+      const unrealized = totalEval - totalInvested;
+      const unrealizedPct = totalInvested > 0 ? unrealized / totalInvested * 100 : 0;
+
+      // 실현 손익: 매도 trades의 (매도가 - 현재 평균매수가) × 수량
+      const sellTrades = trades.filter(t => t.type === '매도');
+      let realizedPnL = 0;
+      sellTrades.forEach(t => {
+        const s = stocks.find(x => x.name === t.stockName && x.accountId === t.accountId);
+        if (s && s.buyAmount > 0 && s.qty > 0) {
+          realizedPnL += (t.price - s.buyAmount / s.qty) * t.qty;
+        }
+      });
+
+      const totalDivAmt = activeDividends.reduce((s, d) => s + d.amount, 0);
+      const totalReturn = unrealized + realizedPnL + totalDivAmt;
+      const totalReturnPct = totalInvested > 0 ? totalReturn / totalInvested * 100 : 0;
+
+      const pnlHtml = (v) => {
+        const abs = Math.abs(Math.round(v));
+        return v >= 0
+          ? `<span class="profit">+₩${abs.toLocaleString()}</span>`
+          : `<span class="loss">-₩${abs.toLocaleString()}</span>`;
+      };
+      const pctHtml = (v) => v >= 0
+        ? `<span class="profit">+${v.toFixed(2)}%</span>`
+        : `<span class="loss">${v.toFixed(2)}%</span>`;
+
+      document.getElementById('ret-unrealized').innerHTML = pnlHtml(unrealized);
+      document.getElementById('ret-unrealized-pct').innerHTML = pctHtml(unrealizedPct);
+      document.getElementById('ret-realized').innerHTML = pnlHtml(realizedPnL);
+      document.getElementById('ret-realized-cnt').textContent = `매도 ${sellTrades.length}건`;
+      document.getElementById('ret-div').innerHTML = `<span class="text-blue-600">+₩${totalDivAmt.toLocaleString()}</span>`;
+      document.getElementById('ret-div-pct').innerHTML = totalInvested > 0
+        ? `<span class="text-blue-600">+${(totalDivAmt/totalInvested*100).toFixed(2)}%</span>` : '-';
+      document.getElementById('ret-total').innerHTML = pnlHtml(totalReturn);
+      document.getElementById('ret-total-pct').innerHTML = pctHtml(totalReturnPct);
+
+      // 기간별 수익률 테이블
+      const today = new Date().toISOString().slice(0, 10);
+      const monday = getThisWeekMonday();
+      const monthStart = today.slice(0, 7) + '-01';
+      const yearStart = today.slice(0, 4) + '-01-01';
+      const periods = [
+        { label: '일간', cutoff: today, hint: '전날 이전 최신 스냅샷 기준' },
+        { label: '주간', cutoff: monday, hint: '이번 주 월요일 이전 최신 스냅샷 기준' },
+        { label: '월간', cutoff: monthStart, hint: '이번 달 1일 이전 최신 스냅샷 기준' },
+        { label: '연간', cutoff: yearStart, hint: '올해 1월 1일 이전 최신 스냅샷 기준' },
+      ];
+
+      const periodRows = periods.map(p => {
+        const base = getPeriodBase(p.cutoff);
+        if (!base) return `<tr><td class="font-medium">${p.label}</td><td colspan="5" class="text-gray-400 text-xs">스냅샷 없음 — ${p.hint}</td></tr>`;
+        const diff = totalEval - base.totalEval;
+        const diffPct = base.totalEval > 0 ? diff / base.totalEval * 100 : 0;
+        const typeTag = `<span class="text-xs px-1 rounded" style="background:#EEF2FF;color:#4F46E5">${base.type}</span>`;
+        return `<tr>
+          <td class="font-medium">${p.label}</td>
+          <td class="text-xs">${base.date} ${base.time} ${typeTag}</td>
+          <td class="text-right">₩${base.totalEval.toLocaleString()}</td>
+          <td class="text-right">₩${totalEval.toLocaleString()}</td>
+          <td class="text-right ${diff>=0?'profit':'loss'}">${diff>=0?'+':''}₩${Math.abs(Math.round(diff)).toLocaleString()}</td>
+          <td class="text-right font-semibold ${diffPct>=0?'profit':'loss'}">${diffPct>=0?'+':''}${diffPct.toFixed(2)}%</td>
+        </tr>`;
+      }).join('');
+
+      document.getElementById('periodReturnsTable').innerHTML = `
+        <tr class="bg-white"><th>구분</th><th>기준 스냅샷</th><th class="text-right">기준 평가금액</th><th class="text-right">현재 평가금액</th><th class="text-right">변동액</th><th class="text-right">수익률</th></tr>
+        ${periodRows}`;
+
+      // 스냅샷 이력 (최신 순)
+      const snapRows = [...snapshots].reverse().map((s, ri) => {
+        const idx = snapshots.length - 1 - ri;
+        const pnl = s.totalEval - s.totalInvested;
+        const canDel = s.type !== '기준일';
+        return `<tr>
+          <td>${s.date}</td>
+          <td>${s.time}</td>
+          <td><span class="text-xs px-1.5 py-0.5 rounded" style="background:#EEF2FF;color:#4F46E5">${s.type}</span></td>
+          <td class="text-right">₩${s.totalEval.toLocaleString()}</td>
+          <td class="text-right">₩${s.totalInvested.toLocaleString()}</td>
+          <td class="text-right ${pnl>=0?'profit':'loss'}">${pnl>=0?'+':''}₩${Math.abs(pnl).toLocaleString()}</td>
+          <td class="text-right text-blue-600">₩${(s.totalDiv||0).toLocaleString()}</td>
+          <td class="text-center">${canDel ? `<button onclick="deleteSnapshot(${idx})" class="text-red-400 hover:text-red-600 text-xs">✕</button>` : '<span class="text-gray-300 text-xs">—</span>'}</td>
+        </tr>`;
+      }).join('');
+
+      document.getElementById('snapshotTable').innerHTML = `
+        <tr class="bg-white"><th>날짜</th><th>시간</th><th>구분</th><th class="text-right">평가금액</th><th class="text-right">매수금액</th><th class="text-right">손익</th><th class="text-right">누적배당</th><th class="text-center">삭제</th></tr>
+        ${snapRows || '<tr><td colspan="8" class="text-gray-400 text-center">스냅샷 없음</td></tr>'}`;
+
+      // 실현 손익 내역
+      if (!sellTrades.length) {
+        document.getElementById('realizedPnlSection').innerHTML = '<p class="text-gray-400 text-sm">2026-06-19 12:50 이후 매도 내역 없음</p>';
+        return;
+      }
+      const totalRealizedRow = `<tr class="bg-blue-50 font-semibold"><td colspan="5">합계</td><td></td><td class="text-right ${realizedPnL>=0?'profit':'loss'}">${realizedPnL>=0?'+':''}₩${Math.abs(Math.round(realizedPnL)).toLocaleString()}</td></tr>`;
+      const sellRows = sellTrades.map(t => {
+        const acc = ACCOUNTS.find(a => a.id === t.accountId);
+        const s = stocks.find(x => x.name === t.stockName && x.accountId === t.accountId);
+        const avgBuy = s && s.buyAmount > 0 && s.qty > 0 ? Math.round(s.buyAmount / s.qty) : null;
+        const pnl = avgBuy !== null ? (t.price - avgBuy) * t.qty : null;
+        const pnlCell = pnl !== null
+          ? `<span class="${pnl>=0?'profit':'loss'}">${pnl>=0?'+':''}₩${Math.abs(Math.round(pnl)).toLocaleString()}</span>`
+          : '<span class="text-gray-400">매수가 없음</span>';
+        return `<tr>
+          <td>${t.date||'-'}</td>
+          <td class="text-xs">${acc ? acc.name : '-'}</td>
+          <td class="font-medium">${t.stockName||'-'}</td>
+          <td class="text-right">${t.qty}주</td>
+          <td class="text-right">₩${(t.price||0).toLocaleString()}</td>
+          <td class="text-right">${avgBuy !== null ? '₩'+avgBuy.toLocaleString() : '<span class="text-gray-400">-</span>'}</td>
+          <td class="text-right">${pnlCell}</td>
+        </tr>`;
+      }).join('');
+      document.getElementById('realizedPnlSection').innerHTML = `
+        <div class="scroll-table" style="max-height:300px;">
+          <table><tr class="bg-white"><th>날짜</th><th>계좌</th><th>종목명</th><th class="text-right">수량</th><th class="text-right">매도가</th><th class="text-right">평균매수가</th><th class="text-right">추정손익</th></tr>
+          ${sellRows}${totalRealizedRow}</table>
+        </div>`;
+    }
+
+    // ────────────────────────────────────────────────────────────
+
+    function renderManageAccounts() {
+      document.getElementById('manageAccounts').innerHTML = ACCOUNTS.map(acc => {
+        const s = stocks.filter(x => x.accountId === acc.id);
+        const rows = s.map(x => {
+          const avgBuyPrice = x.qty > 0 ? Math.round((x.buyAmount || 0) / x.qty) : 0;
+          return `<tr>
+            <td class="font-medium">${x.name}</td>
+            <td class="text-right">${x.qty}</td>
+            <td class="text-right">₩${(x.curPrice || 0).toLocaleString()}</td>
+            <td class="text-right">₩${(x.evalAmount || 0).toLocaleString()}</td>
+            <td class="text-right">₩${avgBuyPrice.toLocaleString()}</td>
+            <td class="text-right">₩${(x.buyAmount || 0).toLocaleString()}</td>
+            <td class="text-center">
+              <button onclick="editStock('${x.id}')" class="text-[#5B8DEE] hover:underline text-xs mr-2">수정</button>
+              <button onclick="deleteStock('${x.id}')" class="text-red-500 hover:underline text-xs">삭제</button>
+            </td>
+          </tr>`;
+        }).join('');
+        return `<div class="bg-white border border-[#E5E7EB] rounded-lg p-4">
+          <div class="flex justify-between items-center mb-3">
+            <div><p class="text-sm font-semibold">${acc.name} <span class="text-xs text-gray-400 font-normal">(${acc.acctNum})</span></p><p class="text-xs text-gray-400">${s.length}개 종목</p></div>
+            <button onclick="addStock(${acc.id})" class="btn-primary text-xs">+ 추가</button>
+          </div>
+        ${s.length ? `<div class="scroll-table" style="max-height:200px;"><table><tr class="bg-gray-50"><th>종목명</th><th class="text-right">수량</th><th class="text-right">현재가</th><th class="text-right">평가금액</th><th class="text-right">매수가</th><th class="text-right">매수평가금액</th><th class="text-center">관리</th></tr>${rows}</table></div>` : '<p class="text-gray-400 text-sm">종목 없음</p>'}
+        </div>`;
+      }).join('');
+    }
+
+    function renderDividends() {
+      const total = activeDividends.reduce((s, d) => s + d.amount, 0);
+      document.getElementById('dividendTotal').textContent = `₩${total.toLocaleString()}`;
+
+      // 상세 내역 (최신순)
+      const sorted = [...activeDividends].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+      document.getElementById('dividendTableBody').innerHTML = sorted.length
+        ? sorted.map(d => {
+            const acc = ACCOUNTS.find(a => a.id === d.accountId);
+            const tax = d.tax || 0;
+            return `<tr><td>${d.date}</td><td>${acc ? acc.name : '?'}</td><td>${d.stock}</td><td class="text-right text-green-600">₩${d.amount.toLocaleString()}</td><td class="text-right text-orange-500">${tax > 0 ? '₩' + tax.toLocaleString() : '-'}</td></tr>`;
+          }).join('')
+        : '<tr><td colspan="5" class="text-center text-gray-400 py-6">배당 내역 없음</td></tr>';
+
+      // 종목별 배당 요약
+      const stockSummary = {};
+      activeDividends.forEach(d => {
+        if (!stockSummary[d.stock]) stockSummary[d.stock] = { count: 0, total: 0, tax: 0 };
+        stockSummary[d.stock].count++;
+        stockSummary[d.stock].total += d.amount;
+        stockSummary[d.stock].tax += (d.tax || 0);
+      });
+      const summaryRows = Object.entries(stockSummary)
+        .sort((a, b) => b[1].total - a[1].total)
+        .map(([name, v]) => {
+          const stock = stocks.find(s => s.name === name);
+          const buyAmt = stock ? (stock.buyAmount || 0) : 0;
+          const yieldPct = buyAmt > 0 ? ((v.total / buyAmt) * 100).toFixed(2) + '%' : '-';
+          return `<tr>
+            <td class="font-medium">${name}</td>
+            <td class="text-right">${v.count}</td>
+            <td class="text-right text-green-600">₩${v.total.toLocaleString()}</td>
+            <td class="text-right text-orange-500">${v.tax > 0 ? '₩' + v.tax.toLocaleString() : '-'}</td>
+            <td class="text-right text-blue-600">${yieldPct}</td>
+          </tr>`;
+        }).join('');
+      document.getElementById('stockDivSummaryBody').innerHTML = summaryRows || '<tr><td colspan="5" class="text-center text-gray-400 py-4">데이터 없음</td></tr>';
+    }
+
+    function addStock(accountId) {
+      document.getElementById('modalTitle').textContent = '종목 추가';
+      document.getElementById('editStockId').value = '';
+      document.getElementById('editAccountId').value = accountId;
+      document.getElementById('stockName').value = '';
+      document.getElementById('stockQty').value = '';
+      document.getElementById('stockPrice').value = '';
+      document.getElementById('stockCurPrice').value = '';
+      document.getElementById('stockType').value = '주식';
+      document.getElementById('stockModal').classList.remove('hidden');
+    }
+    function editStock(stockId) {
+      const s = stocks.find(x => x.id === stockId);
+      if (!s) return;
+      document.getElementById('modalTitle').textContent = '종목 수정';
+      document.getElementById('editStockId').value = stockId;
+      document.getElementById('editAccountId').value = s.accountId;
+      document.getElementById('stockName').value = s.name;
+      document.getElementById('stockQty').value = s.qty;
+      document.getElementById('stockPrice').value = s.price;
+      document.getElementById('stockCurPrice').value = s.curPrice;
+      document.getElementById('stockType').value = s.type;
+      document.getElementById('stockModal').classList.remove('hidden');
+    }
+    function deleteStock(stockId) {
+      if (!confirm('삭제?')) return;
+      stocks = stocks.filter(s => s.id !== stockId);
+      saveToStorage();
+      updateAll();
+    }
+    function saveStock() {
+      const id = document.getElementById('editStockId').value;
+      const accountId = parseInt(document.getElementById('editAccountId').value);
+      const name = document.getElementById('stockName').value.trim();
+      const qty = parseFloat(document.getElementById('stockQty').value);
+      const price = parseFloat(document.getElementById('stockPrice').value);
+      const curPrice = parseFloat(document.getElementById('stockCurPrice').value);
+      const type = document.getElementById('stockType').value;
+      if (!name || qty <= 0 || curPrice <= 0) { alert('입력값 확인'); return; }
+      const buyAmt = Math.round(price * qty);
+      if (id) {
+        const s = stocks.find(x => x.id === id);
+        if (s) { s.name = name; s.qty = qty; s.price = price; s.curPrice = curPrice; s.evalAmount = Math.round(qty*curPrice); s.buyAmount = buyAmt; s.type = type; }
+      } else {
+        stocks.push({ id: 'manual_'+Date.now(), accountId, name, qty, price, curPrice, evalAmount: Math.round(qty*curPrice), buyAmount: buyAmt, type });
+      }
+      saveToStorage();
+      closeModal();
+      updateAll();
+    }
+    function closeModal() { document.getElementById('stockModal').classList.add('hidden'); }
+
+    function updateExchangeRate(val) { const v = parseInt(val); if (v > 0) { exchangeRate = v; saveToStorage(); updateAll(); } }
+
+    // Charts
+    function renderAccountPieChart() {
+      const ctx = document.getElementById('accountPieChart').getContext('2d');
+      if (accountPieChart) accountPieChart.destroy();
+      const data = ACCOUNTS.map(acc => {
+        const ev = stocks.filter(s => s.accountId === acc.id).reduce((sum, s) => sum + (s.evalAmount || 0), 0);
+        return { name: acc.name, total: ev };
+      }).filter(d => d.total > 0);
+      if (!data.length) {
+        document.getElementById('accountPieChart').parentElement.innerHTML = '<p class="text-gray-400 text-sm py-10 text-center">데이터가 없습니다</p>';
+        return;
+      }
+      const colors = ['#5B8DEE', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4'];
+      accountPieChart = new Chart(ctx, { type: 'doughnut', data: { labels: data.map(d => d.name), datasets: [{ data: data.map(d => d.total), backgroundColor: colors.slice(0, data.length) }] }, options: { responsive: true, plugins: { legend: { position: 'right', labels: { font: { size: 11 } } } } } });
+    }
+    function renderStockPieChart() {
+      const ctx = document.getElementById('stockPieChart').getContext('2d');
+      if (stockPieChart) stockPieChart.destroy();
+      const totals = {};
+      stocks.forEach(s => { totals[s.name] = (totals[s.name] || 0) + (s.evalAmount || 0); });
+      const entries = Object.entries(totals).sort((a, b) => b[1] - a[1]).slice(0, 10);
+      if (!entries.length) {
+        document.getElementById('stockPieChart').parentElement.innerHTML = '<p class="text-gray-400 text-sm py-10 text-center">데이터가 없습니다</p>';
+        return;
+      }
+      const colors = ['#5B8DEE', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#14B8A6', '#F97316', '#6366F1'];
+      stockPieChart = new Chart(ctx, { type: 'doughnut', data: { labels: entries.map(e => e[0]), datasets: [{ data: entries.map(e => e[1]), backgroundColor: colors.slice(0, entries.length) }] }, options: { responsive: true, plugins: { legend: { position: 'right', labels: { font: { size: 10 } } } } } });
+    }
+    function renderPnlChart() {
+      const ctx = document.getElementById('pnlChart').getContext('2d');
+      if (pnlChart) pnlChart.destroy();
+      const data = stocks
+        .filter(s => s.buyAmount > 0)
+        .map(s => ({ name: s.name, profit: (s.evalAmount || 0) - (s.buyAmount || 0) }))
+        .sort((a, b) => Math.abs(b.profit) - Math.abs(a.profit))
+        .slice(0, 10);
+      if (!data.length) {
+        document.getElementById('pnlChart').parentElement.innerHTML = '<p class="text-gray-400 text-sm py-8 text-center">데이터가 없습니다</p>';
+        return;
+      }
+      const colors = data.map(d => d.profit >= 0 ? '#10B981' : '#EF4444');
+      pnlChart = new Chart(ctx, { type: 'bar', data: { labels: data.map(d => d.name), datasets: [{ label: '수익/손실 (원)', data: data.map(d => d.profit), backgroundColor: colors }] }, options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: false, ticks: { callback: v => '₩' + v.toLocaleString() } } } } });
+    }
+    function renderDividendChart() {
+      const ctx = document.getElementById('divChart').getContext('2d');
+      if (divChart) divChart.destroy();
+      const byMonth = {};
+      activeDividends.forEach(d => { if (!d.date) return; const m = d.date.slice(0, 7); byMonth[m] = (byMonth[m] || 0) + d.amount; });
+      const labels = Object.keys(byMonth).sort();
+      const data = labels.map(l => byMonth[l] || 0);
+      if (!labels.length) {
+        document.getElementById('divChart').parentElement.innerHTML = '<p class="text-gray-400 text-sm py-8 text-center">배당 내역이 없습니다</p>';
+        return;
+      }
+      divChart = new Chart(ctx, { type: 'bar', data: { labels: labels.map(l => l.replace('-', '.')), datasets: [{ label: '월별 배당금', data, backgroundColor: '#10B981', borderRadius: 4 }] }, options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { callback: v => '₩' + v.toLocaleString() } } } } });
+    }
+
+    function renderStockDivChart() {
+      const ctx = document.getElementById('stockDivChart').getContext('2d');
+      if (stockDivChart) stockDivChart.destroy();
+      const byStock = {};
+      activeDividends.forEach(d => { byStock[d.stock] = (byStock[d.stock] || 0) + d.amount; });
+      const entries = Object.entries(byStock).sort((a, b) => b[1] - a[1]).slice(0, 10);
+      if (!entries.length) {
+        document.getElementById('stockDivChart').parentElement.innerHTML = '<p class="text-gray-400 text-sm py-8 text-center">배당 내역이 없습니다</p>';
+        return;
+      }
+      const colors = ['#5B8DEE','#10B981','#F59E0B','#EF4444','#8B5CF6','#EC4899','#06B6D4','#14B8A6','#F97316','#6366F1'];
+      stockDivChart = new Chart(ctx, {
+        type: 'bar',
+        data: { labels: entries.map(e => e[0]), datasets: [{ label: '누적 배당금', data: entries.map(e => e[1]), backgroundColor: colors.slice(0, entries.length), borderRadius: 4 }] },
+        options: { indexAxis: 'y', responsive: true, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { callback: v => '₩' + v.toLocaleString() } } } }
+      });
+    }
+
+    function renderAccDivChart() {
+      const ctx = document.getElementById('accDivChart').getContext('2d');
+      if (accDivChart) accDivChart.destroy();
+      const monthSet = new Set();
+      activeDividends.forEach(d => { if (d.date) monthSet.add(d.date.slice(0, 7)); });
+      const labels = [...monthSet].sort();
+      if (!labels.length) {
+        document.getElementById('accDivChart').parentElement.innerHTML = '<p class="text-gray-400 text-sm py-8 text-center">배당 내역이 없습니다</p>';
+        return;
+      }
+      const colors = ['#5B8DEE','#10B981','#F59E0B','#EF4444','#8B5CF6','#EC4899','#06B6D4'];
+      const datasets = ACCOUNTS.map((acc, idx) => {
+        const data = labels.map(m => {
+          return activeDividends.filter(d => d.accountId === acc.id && d.date && d.date.slice(0,7) === m).reduce((s, d) => s + d.amount, 0);
+        });
+        return { label: acc.name, data, backgroundColor: colors[idx % colors.length], borderRadius: 2 };
+      }).filter(ds => ds.data.some(v => v > 0));
+      accDivChart = new Chart(ctx, {
+        type: 'bar',
+        data: { labels: labels.map(l => l.replace('-', '.')), datasets },
+        options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { font: { size: 10 } } } }, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, ticks: { callback: v => '₩' + v.toLocaleString() } } } }
+      });
+    }
+
+    function handleFileSelect(e) { if (e.target.files[0]) handleFile(e.target.files[0]); }
+  </script>
+</body>
+</html>
