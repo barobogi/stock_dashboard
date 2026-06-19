@@ -1,7 +1,7 @@
 """
 매일 오후 7시 주식 일일 보고서 생성·발송 + 일간 스냅샷 저장
 Windows 작업 스케줄러로 실행: python daily_report.py
-Gmail 앱 비밀번호 필요 (환경변수 GMAIL_APP_PWD)
+네이버 메일 SMTP 사용 (환경변수 NAVER_ID, NAVER_PW)
 """
 import sys, os, re, json, smtplib, datetime
 from email.mime.multipart import MIMEMultipart
@@ -15,10 +15,14 @@ REPO_PATH      = r"D:\AI\260619_2_Daily_for_stock_TEMP"
 DASHBOARD_HTML = os.path.join(REPO_PATH, "stock-dashboard.html")
 SNAPSHOT_FILE  = os.path.join(REPO_PATH, "daily_snapshot.json")
 TO_EMAIL       = "barobogi79@gmail.com"
-FROM_EMAIL     = "barobogi79@gmail.com"
-# Google 계정 > 보안 > 앱 비밀번호에서 생성 후 환경변수 설정
-#   PowerShell: [System.Environment]::SetEnvironmentVariable("GMAIL_APP_PWD","xxxx xxxx xxxx xxxx","User")
-GMAIL_APP_PWD  = os.environ.get("GMAIL_APP_PWD", "")
+# 네이버 메일 SMTP — 환경변수 등록:
+#   [System.Environment]::SetEnvironmentVariable("NAVER_ID","네이버아이디","User")
+#   [System.Environment]::SetEnvironmentVariable("NAVER_PW","네이버비밀번호","User")
+NAVER_ID = os.environ.get("NAVER_ID", "")
+NAVER_PW = os.environ.get("NAVER_PW", "")
+FROM_EMAIL = f"{NAVER_ID}@naver.com" if NAVER_ID else ""
+SMTP_HOST  = "smtp.naver.com"
+SMTP_PORT  = 465
 
 ACCOUNTS = [
     {"id":1,"name":"일반계좌1"}, {"id":2,"name":"일반계좌2"},
@@ -228,14 +232,14 @@ def build_html(r):
 </body></html>"""
 
 # ── 이메일 발송 ───────────────────────────────────────────────
-def send_email(subject, html_body, app_pwd):
+def send_email(subject, html_body):
     msg = MIMEMultipart('alternative')
     msg['Subject'] = subject
     msg['From']    = FROM_EMAIL
     msg['To']      = TO_EMAIL
     msg.attach(MIMEText(html_body, 'html', 'utf-8'))
-    with smtplib.SMTP_SSL('smtp.gmail.com', 465) as s:
-        s.login(FROM_EMAIL, app_pwd)
+    with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT) as s:
+        s.login(NAVER_ID, NAVER_PW)
         s.sendmail(FROM_EMAIL, TO_EMAIL, msg.as_string())
 
 # ── 메인 ─────────────────────────────────────────────────────
@@ -250,19 +254,19 @@ def main():
     print(f"  오늘 거래:  {len(r['today_trades'])}건")
     print(f"  오늘 배당:  {len(r['today_divs'])}건 ₩{r['today_div_total']:,}")
 
-    # 앱 비밀번호 확인
-    app_pwd = GMAIL_APP_PWD
-    if not app_pwd:
-        print("\n⚠️  Gmail 앱 비밀번호 미설정. 이메일 발송 생략.")
-        print("  설정: Google 계정 → 보안 → 2단계 인증 → 앱 비밀번호 생성")
-        print("  PowerShell 환경변수 등록:")
-        print('  [System.Environment]::SetEnvironmentVariable("GMAIL_APP_PWD","앱비밀번호","User")')
+    # 네이버 계정 확인
+    if not NAVER_ID or not NAVER_PW:
+        print("\n⚠️  네이버 계정 환경변수 미설정. 이메일 발송 생략.")
+        print("  PowerShell 환경변수 등록 (한 번만):")
+        print('  [System.Environment]::SetEnvironmentVariable("NAVER_ID","네이버아이디","User")')
+        print('  [System.Environment]::SetEnvironmentVariable("NAVER_PW","네이버비밀번호","User")')
+        print("  네이버 메일 → 환경설정 → POP3/SMTP → SMTP 사용함 설정 필요")
     else:
         subject = (f"[Barobogi] 주식 일일 보고서 {r['today']} "
                    f"₩{r['total_eval']:,} ({'+' if r['daily_pct']>=0 else ''}{r['daily_pct']:.2f}%)")
         html_body = build_html(r)
         try:
-            send_email(subject, html_body, app_pwd)
+            send_email(subject, html_body)
             print(f"  ✅ 메일 발송 완료 → {TO_EMAIL}")
         except Exception as e:
             print(f"  ❌ 메일 발송 실패: {e}")
