@@ -495,16 +495,33 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
         localStorage.removeItem(STORAGE_KEY);
         window.history.replaceState({}, '', window.location.pathname);
       }
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        // 저장된 데이터(매수가 포함) 복원
-        loadFromStorage();
-      } else {
-        // 최초 실행: 기본 잔고 데이터 로드
+      if (window.KAKAO_PARSED_DATA) {
+        // Python watcher가 자동 주입한 데이터 사용
+        const kd = window.KAKAO_PARSED_DATA;
         stocks = DEFAULT_STOCKS.map(s => ({
           ...s,
           id: 'init_' + s.accountId + '_' + Date.now() + '_' + Math.random().toString(36).slice(2,6)
         }));
+        dividends = kd.dividends || [];
+        trades    = kd.trades    || [];
+        deposits  = kd.deposits  || [];
+        snapshots = kd.snapshots || [];
+        exchangeRate = kd.exchangeRate || 1512.8;
+        document.getElementById('exchangeRateInput').value = exchangeRate;
+        applyTrades();
+        const ua = kd.updatedAt;
+        if (ua) document.getElementById('statusText').textContent =
+          `자동 업데이트: ${ua.slice(0,16).replace('T',' ')}`;
+      } else {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          loadFromStorage();
+        } else {
+          stocks = DEFAULT_STOCKS.map(s => ({
+            ...s,
+            id: 'init_' + s.accountId + '_' + Date.now() + '_' + Math.random().toString(36).slice(2,6)
+          }));
+        }
       }
       // 기준일 스냅샷 없으면 DEFAULT_STOCKS 기준으로 초기 생성
       if (!snapshots.some(s => s.type === '기준일')) {
@@ -544,6 +561,39 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
           document.getElementById('exchangeRateInput').value = exchangeRate;
         }
       } catch(e) {}
+    }
+
+    function applyTrades() {
+      trades.forEach(t => {
+        if (t.type === '매수') {
+          let s = stocks.find(x => x.name === t.stockName && x.accountId === t.accountId);
+          if (s) {
+            s.qty += t.qty;
+            s.buyAmount = (s.buyAmount || 0) + t.total;
+            s.evalAmount = s.qty * (s.curPrice || 0);
+          } else {
+            stocks.push({
+              id: 'tr_' + Date.now() + '_' + Math.random().toString(36).slice(2,6),
+              accountId: t.accountId, name: t.stockName,
+              qty: t.qty, curPrice: t.price,
+              evalAmount: t.qty * t.price, buyAmount: t.total,
+              type: t.isOverseas ? '해외증권' : '주식'
+            });
+          }
+        } else {
+          const idx = stocks.findIndex(x => x.name === t.stockName && x.accountId === t.accountId);
+          if (idx !== -1) {
+            const s = stocks[idx];
+            const prev = s.qty;
+            s.qty -= t.qty;
+            if (s.qty <= 0) { stocks.splice(idx, 1); }
+            else {
+              s.buyAmount = Math.round((s.buyAmount || 0) * s.qty / prev);
+              s.evalAmount = s.qty * (s.curPrice || 0);
+            }
+          }
+        }
+      });
     }
 
     function resetData() {

@@ -1,6 +1,6 @@
 # 민감 데이터 파일 제외
 *.csv
-*.txt
 *.png
 *.jpg
 PROJECT_LOG.md
+KakaoTalk*.txt
