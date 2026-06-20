@@ -96,3 +96,100 @@ function saveToStorage() {
 
 ### 커밋
 `7223ad8 fix: KAKAO_PARSED_DATA 최신여부 자동 비교 — localStorage 자동갱신 + snapshots 보존`
+
+---
+
+## 이슈 #2: TRADE_DATE_CUT 하드코딩 (코드 품질 이슈)
+
+### 증상
+- `stock-dashboard.html`과 `kakao_watcher.py` 양쪽에 `'2026-06-19'`, `'12:50'` 문자열 하드코딩
+- 포트폴리오 기준일 변경 시 양쪽 모두 수동으로 수정해야 하는 유지보수 위험
+
+### 원인 분석
+- kakao_watcher.py → 데이터 파싱 시 필터링 기준으로 사용
+- HTML JS → 거래 적용/실현손익 계산 시 별도로 하드코딩
+- 두 파일이 독립적으로 관리되어 동기화 실패 가능성 있음
+
+### 수정 내용
+**kakao_watcher.py**: `tradeDateCut`, `tradeTimeCut` 필드를 KAKAO_PARSED_DATA에 주입
+```python
+'tradeDateCut': TRADE_DATE_CUT,
+'tradeTimeCut': TRADE_TIME_CUT,
+```
+
+**stock-dashboard.html**: 상수를 KAKAO_PARSED_DATA에서 읽도록 변경 (폴백: 기존 하드코딩값)
+```javascript
+const BASELINE_DATE = (window.KAKAO_PARSED_DATA && window.KAKAO_PARSED_DATA.tradeDateCut)
+  ? window.KAKAO_PARSED_DATA.tradeDateCut : '2026-06-19';
+const BASELINE_TIME = (window.KAKAO_PARSED_DATA && window.KAKAO_PARSED_DATA.tradeTimeCut)
+  ? window.KAKAO_PARSED_DATA.tradeTimeCut : '12:50';
+```
+- 이후 모든 `'2026-06-19'`, `'12:50'` 하드코딩 → `BASELINE_DATE`, `BASELINE_TIME` 으로 교체
+
+### 결과
+- kakao_watcher.py 한 곳만 수정하면 HTML도 자동 반영
+- KAKAO_PARSED_DATA 미존재 환경(로컬 테스트 등)에서도 폴백값으로 정상 동작
+
+### 커밋
+`5952932 feat: TRADE_DATE_CUT 상수화, 환율 자동갱신, 포트폴리오 추이 차트`
+
+---
+
+## 이슈 #3: 환율 고정값 사용 (기능 개선)
+
+### 증상
+- `EXCHANGE_RATE = 1512.8` 고정값 사용 → 환율 변동 시 해외 ETF 평가금액 오차
+
+### 수정 내용
+**kakao_watcher.py**: `fetch_exchange_rate()` 함수 추가
+- Dunamu API (카카오 계열) 우선 조회
+- 실패 시 Naver Finance 폴백
+- `process_file()` 및 `refresh_prices_only()` 에서 현재가 조회 전 환율 먼저 갱신
+- 갱신된 환율을 KAKAO_PARSED_DATA에 포함해 HTML에도 반영
+
+### 주기
+- 매 정시 현재가 갱신(09:00~22:00)과 동일 주기로 환율도 자동 갱신
+- 카카오톡 파일 처리 시에도 갱신
+
+### 커밋
+`5952932 feat: TRADE_DATE_CUT 상수화, 환율 자동갱신, 포트폴리오 추이 차트`
+
+---
+
+## 이슈 #4: Netlify CDN 캐시로 인한 타임스탬프 미갱신 (배포 인프라 이슈)
+
+### 증상
+- watcher가 매 정시 HTML 갱신 후 GitHub push 성공
+- git 로컬/원격 모두 최신 pushedAt = "2026-06-20T09:00:26" 확인됨
+- 브라우저에는 "2026.06.19 20:40 기준 (자동업데이트)" 표시 (어제 시간)
+
+### 원인 분석
+```
+watcher → HTML 업데이트 → GitHub push → Netlify 빌드
+                                               ↓
+                                        CDN 엣지 노드에 캐시 저장
+                                               ↓
+                      브라우저 요청 → CDN이 캐시된 구버전 HTML 반환 ❌
+```
+- Netlify는 HTML 파일을 CDN에 캐싱
+- 새 배포 후에도 CDN 캐시 만료 전까지 구버전 HTML 서빙
+- `Cache-Control` 헤더 미설정 시 Netlify 기본 캐시 정책 적용
+
+### 수정 내용
+**신규 파일: `netlify.toml`**
+```toml
+[[headers]]
+  for = "/*.html"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+    Pragma = "no-cache"
+    Expires = "0"
+```
+- 모든 HTML에 `no-cache` 헤더 적용 → CDN이 항상 최신 HTML 요청
+
+### 결과
+- watcher 갱신 시 브라우저에 즉시 최신 타임스탬프 반영
+- `Ctrl+Shift+R` 없이도 자동 갱신
+
+### 커밋
+`dbc7820 fix: HTML 캐시 비활성화 (Netlify CDN 캐시 문제 해결)`
