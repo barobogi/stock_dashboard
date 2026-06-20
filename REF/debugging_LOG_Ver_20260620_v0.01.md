@@ -307,3 +307,196 @@ Chart.defaults.animation = false;  // 애니메이션은 꺼졌으나
 ### 커밋
 - `1b06aee` animation 비활성화 (1차)
 - `d5234dc` canvas 고정 높이 래퍼 (근본 해결)
+
+---
+
+## 이슈 #7: 일일 이메일 보고서 발송 미작동 → Daum SMTP 변경으로 해결
+
+### 증상
+- `daily_report.py` 매일 19:00(7시) 실행 (작업 스케줄러 등록됨)
+- 그러나 이메일 미수신 — Naver SMTP 535 오류 확인
+- 네이버 계정 2단계 인증 활성화로 SMTP 일반 비밀번호 로그인 차단됨
+
+### 원인 분석
+**Naver SMTP 불가 (2FA 활성화)**
+```
+Error: [Errno 535] b'5.7.8 Username and password not accepted'
+Reason: 네이버 계정에 2단계 인증(2FA) 설정되어 있음
+        → SMTP 접속 시 특수 앱 비밀번호 필요 (별도 발급 필요)
+```
+
+**기존 코드 (daily_report.py line 24-25)**:
+```python
+SMTP_HOST  = "smtp.naver.com"
+SMTP_PORT  = 465
+NAVER_ID = os.environ.get("NAVER_ID", "")
+NAVER_PW = os.environ.get("NAVER_PW", "")
+FROM_EMAIL = f"{NAVER_ID}@naver.com" if NAVER_ID else ""
+```
+
+### 해결 방법: Daum SMTP로 변경
+
+**1단계: Daum SMTP 활성화**
+- mail.daum.net 접속 → 로그인 → 설정 → SMTP 사용함 활성화
+- Daum은 2FA 미지원 → 일반 계정 비밀번호로 SMTP 접속 가능
+
+**2단계: 앱 비밀번호 생성 (보안 강화)**
+- 비정상 접속을 피하기 위해 일반 비밀번호 대신 앱 전용 비밀번호 사용 권장
+- Daum 보안 설정에서 "앱 비밀번호" 생성 → 해당 비밀번호로 SMTP 접근
+
+**3단계: daily_report.py 수정** (line 4, 18-25, 242, 258-263)
+
+```python
+# 수정 전
+SMTP_HOST  = "smtp.naver.com"
+NAVER_ID = os.environ.get("NAVER_ID", "")
+NAVER_PW = os.environ.get("NAVER_PW", "")
+FROM_EMAIL = f"{NAVER_ID}@naver.com" if NAVER_ID else ""
+server.login(NAVER_ID, NAVER_PW)
+
+# 수정 후
+SMTP_HOST  = "smtp.daum.net"
+DAUM_ID = os.environ.get("DAUM_ID", "")
+DAUM_PW = os.environ.get("DAUM_PW", "")  # 앱 비밀번호
+FROM_EMAIL = f"{DAUM_ID}@daum.net" if DAUM_ID else ""
+server.login(DAUM_ID, DAUM_PW)
+```
+
+**4단계: 환경변수 등록 (PowerShell)**
+```powershell
+[System.Environment]::SetEnvironmentVariable("DAUM_ID", "hanbogi79", "User")
+[System.Environment]::SetEnvironmentVariable("DAUM_PW", "kpsbzvdunszborwo", "User")
+```
+
+### 테스트 및 결과
+
+**테스트 실행** (2026-06-20 12:35):
+```powershell
+$env:DAUM_ID = "hanbogi79"
+$env:DAUM_PW = "kpsbzvdunszborwo"
+& "C:\hb\python.exe" "D:\AI\260619_2_Daily_for_stock_TEMP\daily_report.py"
+```
+
+**출력 결과**:
+```
+[2026-06-20 12:35:06] 일일 보고서 생성 시작
+  총 평가금액: ₩596,205,884
+  일간 변동:  +₩0 (+0.00%)
+  오늘 거래:  0건
+  오늘 배당:  0건 ₩0
+  ✅ 메일 발송 완료 → barobogi79@gmail.com
+  ✅ 스냅샷 저장: 2026-06-20 ₩596,205,884
+```
+
+✅ **메일 발송 성공!**
+
+### 발송 현황
+
+| 항목 | 상태 |
+|------|------|
+| 발신자 | hanbogi79@daum.net |
+| 수신자 | barobogi79@gmail.com |
+| 제목 | [Barobogi] 주식 일일 보고서 2026-06-20 ... |
+| 상태 | ✅ 성공 |
+| 수신 위치 | Gmail 스팸함 (첫 발신자 자동 분류) |
+
+### Gmail 스팸함 처리
+
+첫 발신자 이메일을 Gmail이 자동으로 스팸 처리함 → "스팸 아님"으로 표시하면 이후 매일 받은편지함으로 수신.
+
+```
+1. Gmail 스팸함 열기
+2. hanbogi79@daum.net 발신 메일 선택
+3. 상단 "스팸 아님" 클릭
+4. 이후 매일 받은편지함으로 자동 수신 ✅
+```
+
+### 스케줄러 확인
+
+Windows 작업 스케줄러: **StockDailyReport** (매일 19:00)
+- 이제부터 매일 오후 7시 자동으로 이메일 발송됨
+- daily_snapshot.json도 동시에 갱신됨 (내일 일간 변동 비교용)
+
+### 결과
+- ✅ Naver SMTP 문제 완벽 해결
+- ✅ 이메일 발송 정상 작동
+- ✅ 일간 스냅샷 저장 정상 작동
+- ✅ 매일 자동 실행 스케줄러 확인
+
+### 커밋
+`d42fdd4 fix: 이메일 SMTP Naver → Daum 변경, GitHub Pages URL 수정`
+
+---
+
+## 이슈 #8: ac.finance.naver.com DNS 차단 — 신규 종목 코드 검색 실패
+
+### 증상
+- `_naver_search_code()` 함수가 DNS 차단된 `ac.finance.naver.com` 사용 중
+- 현재는 `ticker_map.json` 캐시(24종목)로 우회 중이어서 정상 작동
+- **신규 종목 추가 시** 코드 검색 실패 → 현재가 0원 표시
+
+### 원인
+RFE_report에 수정 기록됐으나 실제 코드에는 반영 안 된 상태였음
+
+### 수정 내용
+```python
+# 변경 전 (DNS 차단)
+r = _sess.get('https://ac.finance.naver.com/ac', ...)
+
+# 변경 후 (정상 작동)
+r = _sess.get('https://ac.stock.naver.com/ac', ...)
+```
+
+### 커밋
+`876c202 fix: Naver검색 URL 수정(ac.stock), 환율 기본값 1375원 현실화, API실패시 이전값 유지`
+
+---
+
+## 이슈 #9: EXCHANGE_RATE 기본값 시세 오차 (1512.8 → 1375.0)
+
+### 증상
+- `EXCHANGE_RATE = 1512.8` 고정 — 현재 실제 환율 ~1375원과 약 10% 차이
+- Dunamu API 실패 시 이 폴백값으로 해외 ETF 평가금액 과대계산
+
+### 추가 개선
+API 실패 시 `data['exchangeRate'] = EXCHANGE_RATE` 항상 주입하도록 변경
+→ 이전 성공 조회값이 전역변수에 남아있으면 그 값을 사용 (최후 수단만 기본값 사용)
+
+### 커밋
+`876c202 fix: Naver검색 URL 수정(ac.stock), 환율 기본값 1375원 현실화, API실패시 이전값 유지`
+
+---
+
+## 이슈 #10: watcher 재부팅 자동시작 미작동 — 시작 프로그램 폴더로 전환
+
+### 증상
+- 레지스트리 Run 키(`KakaoWatcher`) 등록돼 있으나 재부팅 후 자동 시작 실패
+- 매번 수동으로 `Start-Process` 실행 필요
+
+### 원인
+부팅 직후 Google Drive가 아직 마운트되기 전에 watcher 실행 →
+`G:\내 드라이브\KakaoTalk` 폴더 없음 → 즉시 종료
+
+### 수정 내용
+1. 레지스트리 Run 키 제거
+2. `start_watcher.vbs` 생성 — 30초 대기 후 watcher 실행 (창 숨김)
+```vbs
+WScript.Sleep 30000
+CreateObject("WScript.Shell").Run """C:\hb\python.exe"" ""D:\AI\260619_2_Daily_for_stock_TEMP\kakao_watcher.py""", 0, False
+```
+3. 시작 프로그램 폴더에 단축키 등록
+```
+C:\Users\82102\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\KakaoWatcher.lnk
+```
+
+### 동작 흐름
+```
+Windows 부팅 → 로그인
+→ KakaoWatcher.lnk 자동 실행
+→ start_watcher.vbs 30초 대기 (Google Drive 마운트 대기)
+→ kakao_watcher.py 백그라운드 실행 (창 숨김)
+```
+
+### 결과
+- 레지스트리 Run 키 → 시작 프로그램 폴더 단축키로 전환
+- 30초 지연으로 Google Drive 마운트 후 안정적 시작
