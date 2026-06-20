@@ -277,4 +277,4 @@ _accReturnChart = new Chart(canvas2, {
 - 전역 설정(`Chart.defaults.animation = false`)으로 기존 탭 모든 차트에도 동일 효과 적용
 
 ### 커밋
-`(이번 수정 커밋 후 추가 예정)`
+`1b06aee fix: 계좌비교 차트 애니메이션 루프 → 메모리 과소비 수정 (Chart.defaults.animation=false)`
