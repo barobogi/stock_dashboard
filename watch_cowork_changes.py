@@ -87,6 +87,10 @@ class CoworkHandler(FileSystemEventHandler):
     def on_created(self, event):
         self._handle(event.src_path)
 
+    def on_moved(self, event):
+        # Edit 툴 등 atomic write(temp→rename) 방식 감지
+        self._handle(event.dest_path)
+
     def _handle(self, path: str):
         p = Path(path)
         if p.is_dir():
