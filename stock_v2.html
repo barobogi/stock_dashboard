@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stock Management</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    .tab-active { color: #5B8DEE; border-bottom: 2px solid #5B8DEE; }
+    .tab-inactive { color: #9CA3AF; }
+    .drag-over { background-color: #EBF0FF; border: 2px dashed #5B8DEE; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 10px; text-align: left; border-bottom: 1px solid #E5E7EB; }
+    th { background-color: #F9FAFB; font-weight: 600; }
+  </style>
+</head>
+<body class="bg-gray-50">
+
+  <header class="bg-white border-b border-gray-200">
+    <div class="max-w-7xl mx-auto px-6 py-4">
+      <h1 class="text-2xl font-bold">📈 Stock Management v2</h1>
+      <p id="status" class="text-sm text-gray-500 mt-2">로딩 중...</p>
+    </div>
+  </header>
+
+  <div class="bg-white border-b border-gray-200 sticky top-0">
+    <div class="max-w-7xl mx-auto px-6 flex gap-8">
+      <button onclick="switchTab('dashboard')" class="tab-button py-3 text-sm tab-active" data-tab="dashboard">Dashboard</button>
+      <button onclick="switchTab('portfolio')" class="tab-button py-3 text-sm tab-inactive" data-tab="portfolio">Portfolio</button>
+      <button onclick="switchTab('settings')" class="tab-button py-3 text-sm tab-inactive" data-tab="settings">Settings</button>
+    </div>
+  </div>
+
+  <div class="max-w-7xl mx-auto px-6 py-8">
+
+    <!-- DASHBOARD -->
+    <div id="dashboard" class="tab-content">
+      <div class="bg-white rounded-lg border p-6 mb-6">
+        <h2 class="text-lg font-semibold mb-4">📂 파일 임포트</h2>
+        <div id="dropZone" class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-blue-400">
+          <p class="text-gray-600 mb-2">KakaoTalkChats.txt를 드롭하세요</p>
+          <input type="file" id="fileInput" class="hidden" accept=".txt" onchange="handleFileSelect(event)">
+        </div>
+        <div id="importLog" class="mt-4 p-4 bg-gray-100 rounded max-h-48 overflow-y-auto text-sm font-mono whitespace-pre-wrap"></div>
+      </div>
+
+      <div class="grid grid-cols-4 gap-4 mb-6">
+        <div class="bg-white rounded-lg border p-4">
+          <p class="text-sm text-gray-500">총 투자금</p>
+          <p id="totalInvested" class="text-2xl font-bold">₩0</p>
+        </div>
+        <div class="bg-white rounded-lg border p-4">
+          <p class="text-sm text-gray-500">보유 종목</p>
+          <p id="totalStocks" class="text-2xl font-bold">0</p>
+        </div>
+        <div class="bg-white rounded-lg border p-4">
+          <p class="text-sm text-gray-500">배당금</p>
+          <p id="totalDiv" class="text-2xl font-bold text-green-600">₩0</p>
+        </div>
+        <div class="bg-white rounded-lg border p-4">
+          <p class="text-sm text-gray-500">거래건수</p>
+          <p id="tradeCount" class="text-2xl font-bold">0</p>
+        </div>
+      </div>
+
+      <div id="accountsSummary" class="grid grid-cols-2 gap-4"></div>
+    </div>
+
+    <!-- PORTFOLIO -->
+    <div id="portfolio" class="tab-content hidden">
+      <div id="portfolioList" class="space-y-8"></div>
+    </div>
+
+    <!-- SETTINGS -->
+    <div id="settings" class="tab-content hidden">
+      <div id="settingsList" class="space-y-4"></div>
+    </div>
+
+  </div>
+
+  <script>
+    let stocks = [];
+    let accounts = [];
+    let dividends = [];
+    let trades = [];
+    let exchangeRate = 1300;
+
+    const defaultAccounts = [
+      { id: 1, name: '일반 계좌 1', num: '70714', type: 'general' },
+      { id: 2, name: '일반 계좌 2', num: '70871', type: 'general' },
+      { id: 3, name: 'ISA', num: '71297', type: 'isa' },
+      { id: 4, name: 'IRP', num: '71714', type: 'irp' },
+      { id: 5, name: '연금저축1', num: '71462', type: 'pension' },
+      { id: 6, name: '연금저축2', num: '71615', type: 'pension' },
+      { id: 7, name: '연금저축3', num: '70868', type: 'pension' }
+    ];
+
+    document.addEventListener('DOMContentLoaded', function() {
+      accounts = [...defaultAccounts];
+      const dropZone = document.getElementById('dropZone');
+      const fileInput = document.getElementById('fileInput');
+
+      dropZone.addEventListener('click', () => fileInput.click());
+      dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+      dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+      dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('drag-over');
+        if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+      });
+    });
+
+    function log(msg) {
+      const el = document.getElementById('importLog');
+      el.textContent += msg + '\n';
+      el.scrollTop = el.scrollHeight;
+    }
+
+    function handleFileSelect(e) {
+      if (e.target.files[0]) handleFile(e.target.files[0]);
+    }
+
+    function handleFile(file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        log('=== 파싱 시작 ===');
+        stocks = [];
+        trades = [];
+        dividends = [];
+        parseContent(e.target.result);
+      };
+      reader.readAsText(file);
+    }
+
+    function parseContent(content) {
+      const lines = content.split('\n');
+      let tradeCount = 0;
+      let divCount = 0;
+
+      log(`파일 크기: ${lines.length}줄`);
+
+      // 거래 파싱
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+
+        // 1. 국내 거래: "매수X주  Y원"
+        if ((line.startsWith('매수') || line.startsWith('매도')) && line.includes('주') && line.includes('원')) {
+          const m = line.match(/^(매수|매도)\s*(\d+)\s*주\s+(\d+(?:,\d{3})*)\s*원/);
+          if (!m) continue;
+
+          const type = m[1];
+          const qty = parseInt(m[2]);
+          const price = parseInt(m[3].replace(/,/g, ''));
+
+          // 이전 라인에서 메시지 찾기
+          let msgLine = null;
+          for (let j = i - 1; j >= Math.max(0, i - 5); j--) {
+            if (lines[j].includes('주식체결안내')) {
+              msgLine = lines[j];
+              break;
+            }
+          }
+
+          if (!msgLine) continue;
+
+          const dateM = msgLine.match(/(\d{4})년\s+(\d+)월\s+(\d+)일/);
+          const accM = msgLine.match(/(\d{5})\*+\s*-?\s*\d{1,2}/);
+          const stockM = msgLine.match(/\d{5}\*+.*?\s+(.+)$/);
+
+          if (!accM || !stockM) continue;
+
+          const acc = accM[1];
+          const stockName = stockM[1].trim();
+          const account = accounts.find(a => a.num === acc);
+
+          if (!account) continue;
+
+          let stock = stocks.find(s => s.name === stockName && s.accountId === account.id);
+          if (stock) {
+            if (type === '매수') {
+              stock.qty += qty;
+              stock.price = Math.round((stock.qty * stock.price + qty * price) / stock.qty);
+            } else {
+              stock.qty = Math.max(0, stock.qty - qty);
+            }
+          } else if (type === '매수') {
+            stocks.push({
+              id: Date.now() + Math.random(),
+              accountId: account.id,
+              name: stockName,
+              qty: qty,
+              price: price
+            });
+          }
+
+          tradeCount++;
+        }
+
+        // 2. 해외 거래: "체결가격 : X USD"
+        if (line.includes('체결가격') && line.includes('USD')) {
+          const priceM = line.match(/:\s*([\d.]+)\s*USD/);
+          if (!priceM) continue;
+
+          const priceUSD = parseFloat(priceM[1]);
+          const priceKRW = Math.round(priceUSD * exchangeRate);
+
+          // 전후 라인에서 정보 찾기
+          let stockName = '', qty = 0, accNum = '';
+
+          for (let j = Math.max(0, i - 20); j < Math.min(lines.length, i + 10); j++) {
+            const ck = lines[j].trim();
+            if (!stockName && ck.includes('종목명')) {
+              const sm = ck.match(/:\s*(.+?)(?:\s*$|종목코드)/);
+              if (sm) stockName = sm[1].trim();
+            }
+            if (qty === 0 && (ck.includes('체결수량') || ck.includes('주문수량'))) {
+              const qm = ck.match(/:\s*(\d+)\s*주/);
+              if (qm) qty = parseInt(qm[1]);
+            }
+            if (!accNum && ck.includes('계좌번호')) {
+              const am = ck.match(/(\d{5})\*+/);
+              if (am) accNum = am[1];
+            }
+          }
+
+          if (!stockName || !qty || !accNum) continue;
+
+          const account = accounts.find(a => a.num === accNum);
+          if (!account) continue;
+
+          let stock = stocks.find(s => s.name === stockName && s.accountId === account.id);
+          if (stock) {
+            stock.qty += qty;
+            stock.price = Math.round((stock.qty * stock.price + qty * priceKRW) / stock.qty);
+          } else {
+            stocks.push({
+              id: Date.now() + Math.random(),
+              accountId: account.id,
+              name: stockName,
+              qty: qty,
+              price: priceKRW
+            });
+          }
+
+          tradeCount++;
+        }
+
+        // 3. 배당금: "분배금액 : X원" 또는 "배당금 : X"
+        if ((line.includes('분배금액') || line.includes('배당금')) && line.match(/:\s*\d+/)) {
+          const amountM = line.match(/:\s*([\d.]+)\s*(?:USD|원)?/);
+          if (!amountM) continue;
+
+          let amount = parseFloat(amountM[1]);
+          if (amount <= 0) continue;
+
+          if (line.includes('USD')) {
+            amount = Math.round(amount * exchangeRate);
+          } else {
+            amount = parseInt(amount);
+          }
+
+          let stockName = '', accNum = '';
+          for (let j = Math.max(0, i - 15); j < Math.min(lines.length, i + 5); j++) {
+            const ck = lines[j].trim();
+            if (!stockName && (ck.includes('종목명') || ck.includes('상품명'))) {
+              const sm = ck.match(/:\s*(.+?)(?:\s*$|-)/);
+              if (sm) stockName = sm[1].trim();
+            }
+            if (!accNum && ck.includes('계좌번호')) {
+              const am = ck.match(/(\d{5})\*+/);
+              if (am) accNum = am[1];
+            }
+          }
+
+          if (!stockName || !accNum) continue;
+
+          const account = accounts.find(a => a.num === accNum);
+          if (!account) continue;
+
+          dividends.push({
+            accountId: account.id,
+            stock: stockName,
+            amount: amount
+          });
+
+          divCount++;
+        }
+      }
+
+      log(`\n✅ 파싱 완료`);
+      log(`거래: ${tradeCount}건, 배당: ${divCount}건`);
+      log(`보유 종목: ${stocks.length}개`);
+
+      log('\n=== 계좌별 보유 현황 ===');
+      for (const acc of accounts) {
+        const accStocks = stocks.filter(s => s.accountId === acc.id);
+        const total = accStocks.reduce((s, st) => s + st.qty * st.price, 0);
+        log(`${acc.name}: ${accStocks.length}개 종목, ₩${total.toLocaleString()}`);
+      }
+
+      updateAll();
+    }
+
+    function switchTab(name) {
+      document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
+      document.querySelectorAll('.tab-button').forEach(b => {
+        b.classList.remove('tab-active');
+        b.classList.add('tab-inactive');
+      });
+      document.getElementById(name).classList.remove('hidden');
+      document.querySelector(`[data-tab="${name}"]`).classList.add('tab-active');
+      document.querySelector(`[data-tab="${name}"]`).classList.remove('tab-inactive');
+    }
+
+    function updateAll() {
+      const invested = stocks.reduce((s, st) => s + st.qty * st.price, 0);
+      const divTotal = dividends.reduce((s, d) => s + d.amount, 0);
+
+      document.getElementById('totalInvested').textContent = `₩${invested.toLocaleString()}`;
+      document.getElementById('totalStocks').textContent = stocks.length;
+      document.getElementById('totalDiv').textContent = `₩${divTotal.toLocaleString()}`;
+      document.getElementById('tradeCount').textContent = stocks.length;
+      document.getElementById('status').textContent = `✅ 파싱 완료: 종목 ${stocks.length}개, 배당 ₩${divTotal.toLocaleString()}`;
+
+      // 계좌별 요약
+      const html = accounts.map(acc => {
+        const accStocks = stocks.filter(s => s.accountId === acc.id);
+        const total = accStocks.reduce((s, st) => s + st.qty * st.price, 0);
+        const div = dividends.filter(d => d.accountId === acc.id).reduce((s, d) => s + d.amount, 0);
+        return `<div class="bg-white rounded-lg border p-4"><h3 class="font-semibold">${acc.name}</h3><p class="text-sm text-gray-600">종목 ${accStocks.length}개 | 투자 ₩${total.toLocaleString()} | 배당 ₩${div.toLocaleString()}</p></div>`;
+      }).join('');
+      document.getElementById('accountsSummary').innerHTML = html;
+
+      // 포트폴리오
+      const portHtml = accounts.map(acc => {
+        const accStocks = stocks.filter(s => s.accountId === acc.id);
+        const tableHtml = accStocks.length > 0 ? `<table class="text-sm"><tr class="bg-gray-100"><th>종목</th><th class="text-right">수량</th><th class="text-right">단가</th><th class="text-right">합계</th></tr>${accStocks.map(s => `<tr><td>${s.name}</td><td class="text-right">${s.qty}</td><td class="text-right">₩${s.price.toLocaleString()}</td><td class="text-right font-semibold">₩${(s.qty * s.price).toLocaleString()}</td></tr>`).join('')}</table>` : '<p class="text-gray-500">종목 없음</p>';
+        return `<div class="bg-white rounded-lg border p-4"><h3 class="font-semibold mb-2">${acc.name}</h3>${tableHtml}</div>`;
+      }).join('');
+      document.getElementById('portfolioList').innerHTML = portHtml;
+
+      // 설정
+      const setHtml = accounts.map(acc => {
+        const accStocks = stocks.filter(s => s.accountId === acc.id);
+        return `<div class="bg-white rounded-lg border p-4"><p class="font-semibold">${acc.name}</p><p class="text-sm text-gray-600">${accStocks.length}개 종목</p></div>`;
+      }).join('');
+      document.getElementById('settingsList').innerHTML = setHtml;
+    }
+  </script>
+
+</body>
+</html>

@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Today for Barobogi</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", sans-serif;
+    }
+    .nav-active {
+      color: #111827;
+      border-bottom: 2px solid #5B8DEE;
+      padding-bottom: 2px;
+    }
+    .card-hover {
+      transition: box-shadow 0.2s ease-out, background-color 0.2s ease-out;
+    }
+    .card-hover:hover {
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+      background-color: #F9FAFB;
+    }
+    .feature-card-hover {
+      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.2s ease-out;
+    }
+    .feature-card-hover:hover {
+      transform: translateY(-8px);
+      box-shadow: 0 12px 32px rgba(0,0,0,0.1);
+      border-color: #5B8DEE;
+    }
+    a:focus-visible, button:focus-visible {
+      outline: 2px solid #5B8DEE;
+      outline-offset: 2px;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body class="bg-white text-[#111827] min-h-screen flex flex-col">
+
+  <!-- HEADER -->
+  <header class="w-full bg-white border-b border-[#E5E7EB]" style="height:60px;">
+    <div class="max-w-4xl mx-auto px-6 h-full flex justify-between items-center">
+      <a href="index.html" class="text-base font-bold tracking-tight text-[#111827] hover:text-[#5B8DEE] transition-colors duration-200">
+        Today for <span class="text-[#5B8DEE]">Barobogi</span>
+      </a>
+      <nav class="flex gap-8 text-sm text-[#6B7280]">
+        <a href="index.html" class="nav-active font-medium">Home</a>
+        <a href="logs.html" class="hover:text-[#111827] transition-colors duration-200 pb-[2px]">Logs</a>
+        <a href="ai-study.html" class="hover:text-[#111827] transition-colors duration-200 pb-[2px]">AI Study</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- MAIN -->
+  <main class="max-w-4xl w-full mx-auto px-6 flex-grow">
+
+    <!-- HERO -->
+    <section class="py-12 border-b border-[#E5E7EB]">
+      <p class="text-xs font-semibold tracking-widest text-[#5B8DEE] uppercase mb-4">Overview</p>
+      <h1 class="text-[32px] font-bold text-[#111827] leading-snug mb-4">
+        안녕하세요! 오늘을 선명히 바로보고 기록하는<br>
+        개발자이자 AI 탐구자, <span class="underline decoration-[#5B8DEE] decoration-2">Barobogi</span>입니다.
+      </h1>
+      <p class="text-sm text-[#6B7280] leading-relaxed max-w-2xl">
+        이곳은 저의 소소한 하루 일상(Logs)과 매일 치열하게 부딪히는 AI 지식(AI Study)을 축적하는 가든입니다.
+        완성된 답을 나열하기보다, 계속해서 더 가치 있는 매일을 찾아 나가는 과정을 오롯이 기록합니다.
+      </p>
+    </section>
+
+    <!-- GRID -->
+    <section class="py-12 grid grid-cols-1 md:grid-cols-2 gap-12">
+
+      <!-- LEFT: DAILY LOG -->
+      <div>
+        <div class="flex justify-between items-center mb-6">
+          <h2 class="text-base font-semibold text-[#111827]">📂 Today's Daily Log</h2>
+          <a href="logs.html" class="text-xs text-[#6B7280] hover:text-[#5B8DEE] transition-colors duration-200">View All →</a>
+        </div>
+
+        <div class="space-y-4">
+          <!-- 카드 1 -->
+          <div class="card-hover bg-white border border-[#E5E7EB] rounded-lg p-4" style="box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+            <span class="text-xs text-[#9CA3AF]">2026.06.17</span>
+            <h3 class="text-sm font-semibold text-[#111827] mt-1 mb-2">아침 러닝과 차분한 생각 정리</h3>
+            <p class="text-xs text-[#6B7280] leading-relaxed">
+              장마 전 선선한 바람을 맞으며 5km 아침 러닝을 완주했습니다. 뛰면서 복잡했던 마음이 차분히 정돈되는 기분을 느껴 일지에 남겨둡니다.
+            </p>
+            <div class="mt-3 flex gap-2 flex-wrap">
+              <span class="text-[10px] bg-[#EBF0FF] text-[#5B8DEE] px-2 py-0.5 rounded font-medium">#routine</span>
+              <span class="text-[10px] bg-[#EBF0FF] text-[#5B8DEE] px-2 py-0.5 rounded font-medium">#running</span>
+            </div>
+          </div>
+
+          <!-- 카드 2 -->
+          <div class="card-hover bg-white border border-[#E5E7EB] rounded-lg p-4" style="box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+            <span class="text-xs text-[#9CA3AF]">2026.06.16</span>
+            <h3 class="text-sm font-semibold text-[#111827] mt-1 mb-2">밤하늘의 위로</h3>
+            <p class="text-xs text-[#6B7280] leading-relaxed">
+              작업 도중 환기를 위해 창문을 열었는데 밤하늘의 별이 유난히도 맑았습니다. 소소한 순간에서 얻는 에너지가 꽤 큽니다.
+            </p>
+            <div class="mt-3 flex gap-2 flex-wrap">
+              <span class="text-[10px] bg-[#EBF0FF] text-[#5B8DEE] px-2 py-0.5 rounded font-medium">#daily</span>
+              <span class="text-[10px] bg-[#EBF0FF] text-[#5B8DEE] px-2 py-0.5 rounded font-medium">#mindset</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT: AI STUDY -->
+      <div>
+        <div class="flex justify-between items-center mb-6">
+          <h2 class="text-base font-semibold text-[#111827]">📝 Recent AI Study</h2>
+          <a href="ai-study.html" class="text-xs text-[#6B7280] hover:text-[#5B8DEE] transition-colors duration-200">View All →</a>
+        </div>
+
+        <div class="divide-y divide-[#E5E7EB]">
+          <!-- 포스트 1 -->
+          <div class="py-4 first:pt-0">
+            <span class="text-[10px] text-[#5B8DEE] font-semibold tracking-wider uppercase">AI & Next.js</span>
+            <a href="#" class="block text-sm font-medium text-[#111827] hover:text-[#5B8DEE] transition-colors duration-200 mt-1 mb-1">
+              RAG 패턴을 활용한 로컬 도큐먼트 챗봇 구축기
+            </a>
+            <p class="text-xs text-[#9CA3AF]">2026년 6월 15일 · LLM 프롬프트 임베딩</p>
+          </div>
+
+          <!-- 포스트 2 -->
+          <div class="py-4">
+            <span class="text-[10px] text-[#5B8DEE] font-semibold tracking-wider uppercase">Machine Learning</span>
+            <a href="#" class="block text-sm font-medium text-[#111827] hover:text-[#5B8DEE] transition-colors duration-200 mt-1 mb-1">
+              Linear Regression의 수학적 이해와 Python 구현
+            </a>
+            <p class="text-xs text-[#9CA3AF]">2026년 6월 12일 · 머신러닝 수학 기초</p>
+          </div>
+
+          <!-- 포스트 3 -->
+          <div class="py-4">
+            <span class="text-[10px] text-[#5B8DEE] font-semibold tracking-wider uppercase">Prompt Engineering</span>
+            <a href="#" class="block text-sm font-medium text-[#111827] hover:text-[#5B8DEE] transition-colors duration-200 mt-1 mb-1">
+              Few-Shot Prompting으로 원하는 JSON 출력 정확도 높이기
+            </a>
+            <p class="text-xs text-[#9CA3AF]">2026년 6월 10일 · 프롬프트 테크닉</p>
+          </div>
+        </div>
+      </div>
+
+    </section>
+  </main>
+
+  <!-- FOOTER -->
+  <footer class="w-full bg-[#F9FAFB] border-t border-[#E5E7EB]">
+    <div class="max-w-4xl mx-auto px-6 py-10 flex flex-col sm:flex-row justify-between items-center gap-4 text-xs text-[#9CA3AF]">
+      <div>
+        <p class="font-semibold text-[#6B7280] mb-1">CONTACT</p>
+        <p>hello@barobogi.me</p>
+      </div>
+      <div class="text-center sm:text-right">
+        <p class="mb-1">Inspired by cher1shRXD & Lee Boa</p>
+        <p>&copy; 2026 Barobogi. All rights reserved.</p>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>

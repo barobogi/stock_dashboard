@@ -239,7 +239,7 @@ def send_email(subject, html_body):
     msg['To']      = TO_EMAIL
     msg.attach(MIMEText(html_body, 'html', 'utf-8'))
     with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT) as s:
-        s.login(DAUM_ID, DAUM_PW)
+        s.login(FROM_EMAIL, DAUM_PW)
         s.sendmail(FROM_EMAIL, TO_EMAIL, msg.as_string())
 
 # ── 메인 ─────────────────────────────────────────────────────

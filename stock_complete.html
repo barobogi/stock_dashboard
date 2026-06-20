@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stock Management Complete</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    .tab-active { color: #5B8DEE; border-bottom: 2px solid #5B8DEE; }
+    .tab-inactive { color: #9CA3AF; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 10px; text-align: left; border-bottom: 1px solid #E5E7EB; }
+    th { background-color: #F9FAFB; font-weight: 600; }
+    .positive { color: #10B981; }
+    .negative { color: #EF4444; }
+  </style>
+</head>
+<body class="bg-gray-50">
+
+  <header class="bg-white border-b border-gray-200 sticky top-0 z-10">
+    <div class="max-w-7xl mx-auto px-6 py-4">
+      <div class="flex justify-between items-center">
+        <h1 class="text-2xl font-bold">📊 Stock Management Complete</h1>
+        <div id="status" class="text-sm text-gray-500"></div>
+      </div>
+    </div>
+  </header>
+
+  <div class="bg-white border-b border-gray-200">
+    <div class="max-w-7xl mx-auto px-6 flex gap-4 overflow-x-auto">
+      <button onclick="switchTab('dashboard')" class="tab-button py-3 text-sm tab-active whitespace-nowrap" data-tab="dashboard">Dashboard</button>
+      <button onclick="switchTab('portfolio')" class="tab-button py-3 text-sm tab-inactive whitespace-nowrap" data-tab="portfolio">Portfolio</button>
+      <button onclick="switchTab('pnl')" class="tab-button py-3 text-sm tab-inactive whitespace-nowrap" data-tab="pnl">손익 분석</button>
+      <button onclick="switchTab('dividend')" class="tab-button py-3 text-sm tab-inactive whitespace-nowrap" data-tab="dividend">배당금</button>
+      <button onclick="switchTab('trades')" class="tab-button py-3 text-sm tab-inactive whitespace-nowrap" data-tab="trades">거래 기록</button>
+      <button onclick="switchTab('analytics')" class="tab-button py-3 text-sm tab-inactive whitespace-nowrap" data-tab="analytics">분석</button>
+      <button onclick="switchTab('settings')" class="tab-button py-3 text-sm tab-inactive whitespace-nowrap" data-tab="settings">설정</button>
+    </div>
+  </div>
+
+  <div class="max-w-7xl mx-auto px-6 py-8">
+
+    <!-- DASHBOARD -->
+    <div id="dashboard" class="tab-content">
+      <div class="bg-white rounded-lg border p-6 mb-6">
+        <h2 class="text-lg font-semibold mb-4">📂 파일 임포트</h2>
+        <div id="dropZone" class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-blue-400">
+          <p class="text-gray-600 mb-2">KakaoTalkChats.txt를 드롭하세요</p>
+          <input type="file" id="fileInput" class="hidden" accept=".txt" onchange="handleFileSelect(event)">
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div class="bg-white rounded-lg border p-4">
+          <p class="text-sm text-gray-500">총 투자금</p>
+          <p id="totalInvested" class="text-2xl font-bold">₩0</p>
+        </div>
+        <div class="bg-white rounded-lg border p-4">
+          <p class="text-sm text-gray-500">현재 평가액</p>
+          <p id="totalEval" class="text-2xl font-bold">₩0</p>
+        </div>
+        <div class="bg-white rounded-lg border p-4">
+          <p class="text-sm text-gray-500">배당금 (누적)</p>
+          <p id="totalDiv" class="text-2xl font-bold text-green-600">₩0</p>
+        </div>
+        <div class="bg-white rounded-lg border p-4">
+          <p class="text-sm text-gray-500">보유 종목</p>
+          <p id="totalStocks" class="text-2xl font-bold">0</p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="bg-white rounded-lg border p-6">
+          <h3 class="font-semibold mb-4">계좌별 현황</h3>
+          <div id="accountsSummary" class="space-y-3 text-sm"></div>
+        </div>
+        <div class="bg-white rounded-lg border p-6">
+          <h3 class="font-semibold mb-4">자산 분류</h3>
+          <canvas id="assetChart" height="200"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- PORTFOLIO -->
+    <div id="portfolio" class="tab-content hidden">
+      <div class="mb-6 flex gap-2">
+        <input type="text" id="searchStock" placeholder="종목 검색..." class="flex-1 border rounded-lg px-3 py-2 text-sm">
+        <select id="filterAccount" class="border rounded-lg px-3 py-2 text-sm">
+          <option value="">전체 계좌</option>
+        </select>
+      </div>
+      <div id="portfolioList" class="space-y-6"></div>
+    </div>
+
+    <!-- 손익 분석 -->
+    <div id="pnl" class="tab-content hidden">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div class="bg-white rounded-lg border p-4">
+          <p class="text-sm text-gray-500">미실현 손익</p>
+          <p id="unrealizedPnL" class="text-2xl font-bold">₩0</p>
+        </div>
+        <div class="bg-white rounded-lg border p-4">
+          <p class="text-sm text-gray-500">실현 손익</p>
+          <p id="realizedPnL" class="text-2xl font-bold">₩0</p>
+        </div>
+        <div class="bg-white rounded-lg border p-4">
+          <p class="text-sm text-gray-500">전체 손익</p>
+          <p id="totalPnL" class="text-2xl font-bold">₩0</p>
+        </div>
+      </div>
+      <div class="bg-white rounded-lg border p-6">
+        <h3 class="font-semibold mb-4">종목별 손익</h3>
+        <div id="pnlList" class="space-y-2 text-sm max-h-96 overflow-y-auto"></div>
+      </div>
+    </div>
+
+    <!-- 배당금 -->
+    <div id="dividend" class="tab-content hidden">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div class="bg-white rounded-lg border p-4">
+          <p class="text-sm text-gray-500">총 배당금</p>
+          <p id="divTotal" class="text-2xl font-bold text-green-600">₩0</p>
+        </div>
+        <div class="bg-white rounded-lg border p-4">
+          <p class="text-sm text-gray-500">배당 수익률</p>
+          <p id="divRate" class="text-2xl font-bold">0%</p>
+        </div>
+        <div class="bg-white rounded-lg border p-4">
+          <p class="text-sm text-gray-500">배당 종목 수</p>
+          <p id="divCount" class="text-2xl font-bold">0</p>
+        </div>
+      </div>
+      <div class="bg-white rounded-lg border p-6">
+        <h3 class="font-semibold mb-4">월별 배당금</h3>
+        <canvas id="dividendChart" height="200"></canvas>
+      </div>
+    </div>
+
+    <!-- 거래 기록 -->
+    <div id="trades" class="tab-content hidden">
+      <div class="mb-6 flex gap-2">
+        <input type="text" id="searchTrade" placeholder="종목 검색..." class="flex-1 border rounded-lg px-3 py-2 text-sm">
+        <input type="date" id="fromDate" class="border rounded-lg px-3 py-2 text-sm">
+        <input type="date" id="toDate" class="border rounded-lg px-3 py-2 text-sm">
+        <button onclick="exportTrades()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700">CSV 다운로드</button>
+      </div>
+      <div class="bg-white rounded-lg border p-6">
+        <div id="tradesList" class="overflow-x-auto"></div>
+      </div>
+    </div>
+
+    <!-- 분석 -->
+    <div id="analytics" class="tab-content hidden">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="bg-white rounded-lg border p-6">
+          <h3 class="font-semibold mb-4">월별 거래량</h3>
+          <canvas id="monthlyChart" height="150"></canvas>
+        </div>
+        <div class="bg-white rounded-lg border p-6">
+          <h3 class="font-semibold mb-4">자산별 분포</h3>
+          <canvas id="typeChart" height="150"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- 설정 -->
+    <div id="settings" class="tab-content hidden">
+      <div class="bg-white rounded-lg border p-6 mb-6">
+        <h3 class="font-semibold mb-4">💱 환율 설정</h3>
+        <div class="flex gap-2">
+          <input type="number" id="exchangeRate" value="1300" class="border rounded-lg px-3 py-2 text-sm w-32" step="0.01">
+          <button onclick="updateExchangeRate()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium">저장</button>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-lg border p-6">
+        <h3 class="font-semibold mb-4">종목별 현재가 설정</h3>
+        <div id="currentPriceList" class="space-y-3 max-h-64 overflow-y-auto"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js"></script>
+  <script>
+    let stocks = [];
+    let accounts = [];
+    let dividends = [];
+    let trades = [];
+    let currentPrices = {};
+    let exchangeRate = 1300;
+
+    const defaultAccounts = [
+      { id: 1, name: '일반 계좌 1', num: '70714' },
+      { id: 2, name: '일반 계좌 2', num: '70871' },
+      { id: 3, name: 'ISA', num: '71297' },
+      { id: 4, name: 'IRP', num: '71714' },
+      { id: 5, name: '연금저축1', num: '71462' },
+      { id: 6, name: '연금저축2', num: '71615' },
+      { id: 7, name: '연금저축3', num: '70868' }
+    ];
+
+    document.addEventListener('DOMContentLoaded', function() {
+      accounts = [...defaultAccounts];
+      setupEventListeners();
+      setupFilterOptions();
+    });
+
+    function setupEventListeners() {
+      const dropZone = document.getElementById('dropZone');
+      const fileInput = document.getElementById('fileInput');
+
+      dropZone.addEventListener('click', () => fileInput.click());
+      dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('border-blue-400'); });
+      dropZone.addEventListener('dragleave', () => dropZone.classList.remove('border-blue-400'));
+      dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+      });
+
+      document.getElementById('searchStock').addEventListener('keyup', () => updatePortfolio());
+      document.getElementById('filterAccount').addEventListener('change', () => updatePortfolio());
+      document.getElementById('searchTrade').addEventListener('keyup', () => updateTrades());
+    }
+
+    function setupFilterOptions() {
+      const select = document.getElementById('filterAccount');
+      accounts.forEach(acc => {
+        const opt = document.createElement('option');
+        opt.value = acc.id;
+        opt.textContent = acc.name;
+        select.appendChild(opt);
+      });
+    }
+
+    function handleFileSelect(e) {
+      if (e.target.files[0]) handleFile(e.target.files[0]);
+    }
+
+    function handleFile(file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        stocks = [];
+        trades = [];
+        dividends = [];
+        currentPrices = {};
+        parseContent(e.target.result);
+        updateAll();
+      };
+      reader.readAsText(file);
+    }
+
+    function parseContent(content) {
+      const lines = content.split('\n');
+      let tradeCount = 0;
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+
+        // 국내 거래: "매수X주  Y원"
+        if ((line.startsWith('매수') || line.startsWith('매도')) && line.includes('주') && line.includes('원')) {
+          const m = line.match(/^(매수|매도)\s*(\d+)\s*주\s+(\d+(?:,\d{3})*)\s*원/);
+          if (!m) continue;
+
+          const type = m[1];
+          const qty = parseInt(m[2]);
+          const price = parseInt(m[3].replace(/,/g, ''));
+
+          // 이전 라인 탐색 (주식체결안내)
+          let msgLine = null;
+          let msgIdx = -1;
+          for (let j = i - 1; j >= Math.max(0, i - 10); j--) {
+            if (lines[j].includes('주식체결안내')) {
+              msgLine = lines[j];
+              msgIdx = j;
+              break;
+            }
+          }
+
+          if (!msgLine) continue;
+
+          // 날짜, 계좌, 종목명 추출
+          const dateM = msgLine.match(/(\d{4})년\s+(\d+)월\s+(\d+)일/);
+          const accM = msgLine.match(/(\d{5})\*+/);
+          const stockM = msgLine.match(/\d{5}\*+.*?[\s-]+(\S.+?)(?:\s+매수|\s+매도|$)/);
+
+          if (!accM) continue;
+
+          const acc = accM[1];
+          let stockName = '';
+
+          // 종목명이 같은 라인에 없으면 다음 라인 확인
+          if (stockM && stockM[1]) {
+            stockName = stockM[1].trim();
+          } else {
+            // 메시지 라인에서 종목명 추출
+            const parts = msgLine.split(/\d{5}\*+\s*[-\s]*\d+\s+/);
+            if (parts.length > 1) {
+              stockName = parts[1].trim();
+            }
+          }
+
+          if (!stockName) continue;
+
+          const tradeDate = dateM ? `${dateM[1]}-${String(dateM[2]).padStart(2, '0')}-${String(dateM[3]).padStart(2, '0')}` : new Date().toISOString().split('T')[0];
+          const account = accounts.find(a => a.num === acc);
+
+          if (!account) continue;
+
+          // 해외 거래인지 확인
+          const isUSD = stockName.includes('USD') || stockName.includes('달러');
+
+          let stock = stocks.find(s => s.name === stockName && s.accountId === account.id);
+          if (stock) {
+            if (type === '매수') {
+              stock.qty += qty;
+              stock.price = Math.round((stock.qty * stock.price + qty * price) / stock.qty);
+            } else {
+              stock.qty = Math.max(0, stock.qty - qty);
+            }
+          } else if (type === '매수') {
+            stocks.push({
+              id: Date.now() + Math.random(),
+              accountId: account.id,
+              name: stockName,
+              qty: qty,
+              price: price,
+              isUSD: isUSD
+            });
+          }
+
+          trades.push({
+            date: tradeDate,
+            accountId: account.id,
+            stock: stockName,
+            type: type,
+            qty: qty,
+            price: price,
+            isUSD: isUSD
+          });
+
+          tradeCount++;
+        }
+
+        // 해외 거래
+        if (line.includes('체결가격') && line.includes('USD')) {
+          const priceM = line.match(/:\s*([\d.]+)\s*USD/);
+          if (!priceM) continue;
+
+          const priceUSD = parseFloat(priceM[1]);
+          const priceKRW = Math.round(priceUSD * exchangeRate);
+
+          let stockName = '', qty = 0, accNum = '', tradeDate = '';
+
+          for (let j = Math.max(0, i - 20); j < Math.min(lines.length, i + 10); j++) {
+            const ck = lines[j].trim();
+            if (!stockName && ck.includes('종목명')) {
+              const sm = ck.match(/:\s*(.+?)(?:\s*$|종목코드)/);
+              if (sm) stockName = sm[1].trim();
+            }
+            if (qty === 0 && (ck.includes('체결수량') || ck.includes('주문수량'))) {
+              const qm = ck.match(/:\s*(\d+)\s*주/);
+              if (qm) qty = parseInt(qm[1]);
+            }
+            if (!accNum && ck.includes('계좌번호')) {
+              const am = ck.match(/(\d{5})\*+/);
+              if (am) accNum = am[1];
+            }
+            if (!tradeDate && ck.match(/\d{4}년\s+\d+월\s+\d+일/)) {
+              const dm = ck.match(/(\d{4})년\s+(\d+)월\s+(\d+)일/);
+              if (dm) tradeDate = `${dm[1]}-${String(dm[2]).padStart(2, '0')}-${String(dm[3]).padStart(2, '0')}`;
+            }
+          }
+
+          if (!stockName || !qty || !accNum) continue;
+
+          const account = accounts.find(a => a.num === accNum);
+          if (!account) continue;
+
+          let stock = stocks.find(s => s.name === stockName && s.accountId === account.id);
+          if (stock) {
+            stock.qty += qty;
+            stock.price = Math.round((stock.qty * stock.price + qty * priceKRW) / stock.qty);
+          } else {
+            stocks.push({
+              id: Date.now() + Math.random(),
+              accountId: account.id,
+              name: stockName,
+              qty: qty,
+              price: priceKRW,
+              isUSD: true
+            });
+          }
+
+          trades.push({
+            date: tradeDate,
+            accountId: account.id,
+            stock: stockName,
+            type: 'BUY',
+            qty: qty,
+            price: priceKRW,
+            isUSD: true
+          });
+
+          tradeCount++;
+        }
+
+        // 배당금
+        if ((line.includes('분배금액') || line.includes('배당금')) && line.match(/:\s*\d+/)) {
+          const amountM = line.match(/:\s*([\d.]+)\s*(?:USD|원)?/);
+          if (!amountM) continue;
+
+          let amount = parseFloat(amountM[1]);
+          if (amount <= 0) continue;
+
+          if (line.includes('USD')) {
+            amount = Math.round(amount * exchangeRate);
+          } else {
+            amount = parseInt(amount);
+          }
+
+          let stockName = '', accNum = '', divDate = '';
+          for (let j = Math.max(0, i - 15); j < Math.min(lines.length, i + 5); j++) {
+            const ck = lines[j].trim();
+            if (!stockName && (ck.includes('종목명') || ck.includes('상품명'))) {
+              const sm = ck.match(/:\s*(.+?)(?:\s*$|-)/);
+              if (sm) stockName = sm[1].trim();
+            }
+            if (!accNum && ck.includes('계좌번호')) {
+              const am = ck.match(/(\d{5})\*+/);
+              if (am) accNum = am[1];
+            }
+            if (!divDate && ck.match(/\d{4}년\s+\d+월\s+\d+일/)) {
+              const dm = ck.match(/(\d{4})년\s+(\d+)월\s+(\d+)일/);
+              if (dm) divDate = `${dm[1]}-${String(dm[2]).padStart(2, '0')}-${String(dm[3]).padStart(2, '0')}`;
+            }
+          }
+
+          if (!stockName || !accNum) continue;
+
+          const account = accounts.find(a => a.num === accNum);
+          if (!account) continue;
+
+          dividends.push({
+            date: divDate,
+            accountId: account.id,
+            stock: stockName,
+            amount: amount
+          });
+        }
+      }
+
+      document.getElementById('status').textContent = `✅ ${tradeCount}건 거래 임포트 완료`;
+    }
+
+    function switchTab(name) {
+      document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
+      document.querySelectorAll('.tab-button').forEach(b => {
+        b.classList.remove('tab-active');
+        b.classList.add('tab-inactive');
+      });
+      document.getElementById(name).classList.remove('hidden');
+      document.querySelector(`[data-tab="${name}"]`).classList.add('tab-active');
+      document.querySelector(`[data-tab="${name}"]`).classList.remove('tab-inactive');
+
+      if (name === 'analytics') updateAnalytics();
+    }
+
+    function updateAll() {
+      updateDashboard();
+      updatePortfolio();
+      updatePnL();
+      updateDividend();
+      updateTrades();
+      updateSettings();
+    }
+
+    function updateDashboard() {
+      const invested = stocks.reduce((s, st) => s + st.qty * st.price, 0);
+      const current = stocks.reduce((s, st) => s + st.qty * (currentPrices[st.id] || st.price), 0);
+      const divTotal = dividends.reduce((s, d) => s + d.amount, 0);
+
+      document.getElementById('totalInvested').textContent = `₩${invested.toLocaleString()}`;
+      document.getElementById('totalEval').textContent = `₩${current.toLocaleString()}`;
+      document.getElementById('totalDiv').textContent = `₩${divTotal.toLocaleString()}`;
+      document.getElementById('totalStocks').textContent = stocks.length;
+
+      const html = accounts.map(acc => {
+        const accStocks = stocks.filter(s => s.accountId === acc.id);
+        const inv = accStocks.reduce((s, st) => s + st.qty * st.price, 0);
+        const div = dividends.filter(d => d.accountId === acc.id).reduce((s, d) => s + d.amount, 0);
+        return `<div><p class="font-semibold">${acc.name}</p><p class="text-xs text-gray-600">투자 ₩${inv.toLocaleString()} | 배당 ₩${div.toLocaleString()}</p></div>`;
+      }).join('');
+      document.getElementById('accountsSummary').innerHTML = html;
+
+      // 자산 분류 차트
+      const usdCount = stocks.filter(s => s.isUSD).length;
+      const krwCount = stocks.filter(s => !s.isUSD).length;
+      drawChart('assetChart', ['해외주식', '국내주식'], [usdCount, krwCount], 'doughnut');
+    }
+
+    function updatePortfolio() {
+      const search = document.getElementById('searchStock').value.toLowerCase();
+      const filter = document.getElementById('filterAccount').value;
+
+      let filtered = stocks;
+      if (search) filtered = filtered.filter(s => s.name.toLowerCase().includes(search));
+      if (filter) filtered = filtered.filter(s => s.accountId == filter);
+
+      const html = accounts.filter(acc => !filter || acc.id == filter).map(acc => {
+        const accStocks = filtered.filter(s => s.accountId === acc.id);
+        if (accStocks.length === 0) return '';
+
+        const table = `<table class="text-sm"><tr class="bg-gray-100"><th>종목</th><th class="text-right">수량</th><th class="text-right">단가</th><th class="text-right">합계</th></tr>${accStocks.map(s => `<tr><td>${s.name}</td><td class="text-right">${s.qty}</td><td class="text-right">₩${s.price.toLocaleString()}</td><td class="text-right font-semibold">₩${(s.qty * s.price).toLocaleString()}</td></tr>`).join('')}</table>`;
+
+        return `<div class="bg-white rounded-lg border p-4"><h3 class="font-semibold mb-2">${acc.name}</h3>${table}</div>`;
+      }).join('');
+
+      document.getElementById('portfolioList').innerHTML = html || '<p class="text-gray-500">종목 없음</p>';
+    }
+
+    function updatePnL() {
+      let unrealized = 0, realized = 0;
+
+      stocks.forEach(s => {
+        const currentPrice = currentPrices[s.id] || s.price;
+        unrealized += (currentPrice - s.price) * s.qty;
+      });
+
+      const invested = stocks.reduce((s, st) => s + st.qty * st.price, 0);
+      const divTotal = dividends.reduce((s, d) => s + d.amount, 0);
+      const total = unrealized + realized + divTotal;
+
+      document.getElementById('unrealizedPnL').textContent = `${unrealized >= 0 ? '+' : ''}₩${unrealized.toLocaleString()}`;
+      document.getElementById('unrealizedPnL').className = unrealized >= 0 ? 'text-2xl font-bold positive' : 'text-2xl font-bold negative';
+      document.getElementById('realizedPnL').textContent = `${realized >= 0 ? '+' : ''}₩${realized.toLocaleString()}`;
+      document.getElementById('totalPnL').textContent = `${total >= 0 ? '+' : ''}₩${total.toLocaleString()}`;
+
+      const pnlHtml = stocks.map(s => {
+        const currentPrice = currentPrices[s.id] || s.price;
+        const pnl = (currentPrice - s.price) * s.qty;
+        const rate = ((currentPrice - s.price) / s.price * 100).toFixed(2);
+        return `<div class="flex justify-between"><span>${s.name}</span><span class="${pnl >= 0 ? 'positive' : 'negative'}">${pnl >= 0 ? '+' : ''}₩${pnl.toLocaleString()} (${rate}%)</span></div>`;
+      }).join('');
+
+      document.getElementById('pnlList').innerHTML = pnlHtml;
+    }
+
+    function updateDividend() {
+      const divTotal = dividends.reduce((s, d) => s + d.amount, 0);
+      const invested = stocks.reduce((s, st) => s + st.qty * st.price, 0);
+      const rate = invested > 0 ? (divTotal / invested * 100).toFixed(2) : 0;
+      const divStocks = new Set(dividends.map(d => d.stock)).size;
+
+      document.getElementById('divTotal').textContent = `₩${divTotal.toLocaleString()}`;
+      document.getElementById('divRate').textContent = `${rate}%`;
+      document.getElementById('divCount').textContent = divStocks;
+
+      // 월별 차트
+      const monthData = {};
+      dividends.forEach(d => {
+        const month = d.date.substring(0, 7);
+        monthData[month] = (monthData[month] || 0) + d.amount;
+      });
+
+      const months = Object.keys(monthData).sort();
+      const amounts = months.map(m => monthData[m]);
+      drawChart('dividendChart', months, amounts, 'bar');
+    }
+
+    function updateTrades() {
+      const search = document.getElementById('searchTrade').value.toLowerCase();
+      let filtered = trades;
+      if (search) filtered = filtered.filter(t => t.stock.toLowerCase().includes(search));
+
+      const tableHtml = `<table class="text-sm"><tr class="bg-gray-100"><th>날짜</th><th>계좌</th><th>종목</th><th>유형</th><th class="text-right">수량</th><th class="text-right">가격</th></tr>${filtered.map(t => {
+        const acc = accounts.find(a => a.id === t.accountId);
+        return `<tr><td>${t.date}</td><td>${acc?.name}</td><td>${t.stock}</td><td>${t.type}</td><td class="text-right">${t.qty}</td><td class="text-right">₩${t.price.toLocaleString()}</td></tr>`;
+      }).join('')}</table>`;
+
+      document.getElementById('tradesList').innerHTML = tableHtml;
+    }
+
+    function updateAnalytics() {
+      // 월별 거래량
+      const monthTrades = {};
+      trades.forEach(t => {
+        const month = t.date.substring(0, 7);
+        monthTrades[month] = (monthTrades[month] || 0) + 1;
+      });
+
+      const months = Object.keys(monthTrades).sort();
+      const counts = months.map(m => monthTrades[m]);
+      drawChart('monthlyChart', months, counts, 'line');
+
+      // 자산 타입
+      const types = ['국내주식', '해외주식'];
+      const typeCounts = [
+        stocks.filter(s => !s.isUSD).length,
+        stocks.filter(s => s.isUSD).length
+      ];
+      drawChart('typeChart', types, typeCounts, 'pie');
+    }
+
+    function updateSettings() {
+      const html = stocks.map(s => `
+        <div class="flex gap-2 items-center">
+          <input type="number" id="price_${s.id}" value="${currentPrices[s.id] || s.price}" class="border rounded px-2 py-1 text-sm w-24" placeholder="현재가">
+          <span class="text-sm flex-1">${s.name}</span>
+          <button onclick="updateCurrentPrice('${s.id}')" class="text-blue-600 text-sm hover:text-blue-700">저장</button>
+        </div>
+      `).join('');
+
+      document.getElementById('currentPriceList').innerHTML = html;
+    }
+
+    function updateCurrentPrice(stockId) {
+      const value = document.getElementById(`price_${stockId}`).value;
+      if (value) {
+        currentPrices[stockId] = parseInt(value);
+        updatePnL();
+      }
+    }
+
+    function updateExchangeRate() {
+      const value = parseFloat(document.getElementById('exchangeRate').value);
+      if (value > 0) {
+        exchangeRate = value;
+        updateAll();
+      }
+    }
+
+    function exportTrades() {
+      const csv = ['날짜,계좌,종목,유형,수량,가격'].concat(
+        trades.map(t => {
+          const acc = accounts.find(a => a.id === t.accountId);
+          return `${t.date},${acc?.name},${t.stock},${t.type},${t.qty},${t.price}`;
+        })
+      ).join('\n');
+
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `거래기록_${new Date().toISOString().split('T')[0]}.csv`;
+      link.click();
+    }
+
+    function drawChart(elementId, labels, data, type) {
+      const ctx = document.getElementById(elementId);
+      if (!ctx) return;
+
+      if (window[`${elementId}_chart`]) {
+        window[`${elementId}_chart`].destroy();
+      }
+
+      window[`${elementId}_chart`] = new Chart(ctx, {
+        type: type,
+        data: {
+          labels: labels,
+          datasets: [{
+            label: '데이터',
+            data: data,
+            backgroundColor: ['#5B8DEE', '#10B981', '#F59E0B', '#EF4444'],
+            borderColor: '#fff',
+            borderWidth: 2
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          plugins: { legend: { display: type === 'line' ? false : true } }
+        }
+      });
+    }
+  </script>
+
+</body>
+</html>

@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(git config --global user.name)",
+      "PowerShell(git config --global user.email)",
+      "PowerShell(python \"D:\\\\AI\\\\260619_2_Daily_for_stock_TEMP\\\\find_mybox.py\")"
+    ]
+  }
+}

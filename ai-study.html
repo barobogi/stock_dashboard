@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Study — Today for Barobogi</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", sans-serif;
+    }
+    .nav-active {
+      color: #111827;
+      border-bottom: 2px solid #5B8DEE;
+      padding-bottom: 2px;
+    }
+    .post-hover {
+      transition: background-color 0.2s ease-out;
+    }
+    .post-hover:hover {
+      background-color: #F9FAFB;
+    }
+    a:focus-visible, button:focus-visible {
+      outline: 2px solid #5B8DEE;
+      outline-offset: 2px;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body class="bg-white text-[#111827] min-h-screen flex flex-col">
+
+  <!-- HEADER -->
+  <header class="w-full bg-white border-b border-[#E5E7EB]" style="height:60px;">
+    <div class="max-w-4xl mx-auto px-6 h-full flex justify-between items-center">
+      <a href="index.html" class="text-base font-bold tracking-tight text-[#111827] hover:text-[#5B8DEE] transition-colors duration-200">
+        Today for <span class="text-[#5B8DEE]">Barobogi</span>
+      </a>
+      <nav class="flex gap-8 text-sm text-[#6B7280]">
+        <a href="index.html" class="hover:text-[#111827] transition-colors duration-200 pb-[2px]">Home</a>
+        <a href="logs.html" class="hover:text-[#111827] transition-colors duration-200 pb-[2px]">Logs</a>
+        <a href="ai-study.html" class="nav-active font-medium">AI Study</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- MAIN -->
+  <main class="max-w-4xl w-full mx-auto px-6 flex-grow">
+
+    <!-- PAGE TITLE -->
+    <section class="py-12 border-b border-[#E5E7EB]">
+      <p class="text-xs font-semibold tracking-widest text-[#5B8DEE] uppercase mb-4">AI Study</p>
+      <h1 class="text-[32px] font-bold text-[#111827] leading-snug mb-4">AI를 탐구합니다</h1>
+      <p class="text-sm text-[#6B7280] leading-relaxed max-w-2xl">
+        매일 치열하게 부딪히는 AI 지식을 정리합니다. LLM, 머신러닝, 프롬프트 엔지니어링 — 배운 것을 기록하며 더 깊이 이해합니다.
+      </p>
+    </section>
+
+    <!-- STUDY LIST -->
+    <section class="py-12">
+      <div class="divide-y divide-[#E5E7EB]">
+
+        <div class="post-hover py-6 first:pt-0 px-2 -mx-2 rounded-lg">
+          <span class="text-[10px] text-[#5B8DEE] font-semibold tracking-wider uppercase">AI & Next.js</span>
+          <a href="#" class="block text-sm font-semibold text-[#111827] hover:text-[#5B8DEE] transition-colors duration-200 mt-1 mb-2">
+            RAG 패턴을 활용한 로컬 도큐먼트 챗봇 구축기
+          </a>
+          <p class="text-xs text-[#6B7280] leading-relaxed mb-2">
+            Retrieval-Augmented Generation 패턴을 이용해 로컬 문서를 기반으로 답변하는 챗봇을 구축한 과정을 정리합니다. 임베딩 모델 선택부터 벡터 DB 연동까지 단계별로 기록합니다.
+          </p>
+          <p class="text-xs text-[#9CA3AF]">2026년 6월 15일 · LLM 프롬프트 임베딩</p>
+        </div>
+
+        <div class="post-hover py-6 px-2 -mx-2 rounded-lg">
+          <span class="text-[10px] text-[#5B8DEE] font-semibold tracking-wider uppercase">Machine Learning</span>
+          <a href="#" class="block text-sm font-semibold text-[#111827] hover:text-[#5B8DEE] transition-colors duration-200 mt-1 mb-2">
+            Linear Regression의 수학적 이해와 Python 구현
+          </a>
+          <p class="text-xs text-[#6B7280] leading-relaxed mb-2">
+            선형 회귀의 비용 함수, 경사 하강법, 정규 방정식을 수식으로 풀어보고, NumPy로 직접 구현하며 이해를 확인합니다.
+          </p>
+          <p class="text-xs text-[#9CA3AF]">2026년 6월 12일 · 머신러닝 수학 기초</p>
+        </div>
+
+        <div class="post-hover py-6 px-2 -mx-2 rounded-lg">
+          <span class="text-[10px] text-[#5B8DEE] font-semibold tracking-wider uppercase">Prompt Engineering</span>
+          <a href="#" class="block text-sm font-semibold text-[#111827] hover:text-[#5B8DEE] transition-colors duration-200 mt-1 mb-2">
+            Few-Shot Prompting으로 원하는 JSON 출력 정확도 높이기
+          </a>
+          <p class="text-xs text-[#6B7280] leading-relaxed mb-2">
+            Few-Shot 예시를 전략적으로 배치하여 LLM이 원하는 JSON 스키마를 안정적으로 출력하도록 유도하는 방법을 실험합니다.
+          </p>
+          <p class="text-xs text-[#9CA3AF]">2026년 6월 10일 · 프롬프트 테크닉</p>
+        </div>
+
+      </div>
+    </section>
+  </main>
+
+  <!-- FOOTER -->
+  <footer class="w-full bg-[#F9FAFB] border-t border-[#E5E7EB]">
+    <div class="max-w-4xl mx-auto px-6 py-10 flex flex-col sm:flex-row justify-between items-center gap-4 text-xs text-[#9CA3AF]">
+      <div>
+        <p class="font-semibold text-[#6B7280] mb-1">CONTACT</p>
+        <p>hello@barobogi.me</p>
+      </div>
+      <div class="text-center sm:text-right">
+        <p class="mb-1">Inspired by cher1shRXD & Lee Boa</p>
+        <p>&copy; 2026 Barobogi. All rights reserved.</p>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>

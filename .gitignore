@@ -4,3 +4,9 @@
 *.jpg
 PROJECT_LOG.md
 KakaoTalk*.txt
+
+# 로그 파일 (로컬 전용)
+watcher.log
+cowork_changes.log
+*.pyc
+__pycache__/
