@@ -10,3 +10,6 @@ watcher.log
 cowork_changes.log
 *.pyc
 __pycache__/
+
+# Claude Code 로컬 설정 (git 제외)
+.claude/

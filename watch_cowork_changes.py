@@ -53,7 +53,8 @@ def _git_push_changes():
     changed = [ln[3:].strip() for ln in result.stdout.strip().splitlines()]
     logger.info(f"  📝 변경 파일: {', '.join(changed)}")
 
-    subprocess.run(['git', 'add', '-A'], check=True)
+    # git add -u: 이미 추적 중인 파일만 스테이징 (미추적 신규파일 자동추가 방지)
+    subprocess.run(['git', 'add', '-u'], check=True)
     msg = f"auto: Cowork/CLI 변경 자동 배포 {datetime.now().strftime('%Y-%m-%d %H:%M')}"
     subprocess.run(['git', 'commit', '-m', msg], check=True)
 
