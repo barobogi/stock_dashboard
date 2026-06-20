@@ -134,9 +134,10 @@ D:\AI\260619_2_Daily_for_stock_TEMP\
 
 ### watcher (kakao_watcher.py)
 - 실행 방법: `"C:\hb\python.exe" "D:\AI\260619_2_Daily_for_stock_TEMP\kakao_watcher.py"`
-- 레지스트리 자동 시작: `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\KakaoWatcher`
-- **재부팅 후 자동 시작 미작동 확인됨 — 수동 재시작 필요**
-- 매 정시 환율 + 현재가 갱신 후 GitHub push
+- **자동 시작**: 시작 프로그램 폴더 `KakaoWatcher.lnk` → `start_watcher.vbs` 30초 대기 후 실행 (Google Drive 마운트 대기)
+- 매 정시 환율 + 현재가 갱신 후 GitHub push (push 실패 시 3회 재시도 + 30초 간격)
+- observer 비정상 종료 시 10초 후 자동 재시작
+- 실행 로그: `D:\AI\260619_2_Daily_for_stock_TEMP\watcher.log`
 
 ### Claude Desktop MCP 연동
 - 설정 파일: `C:\Users\82102\AppData\Roaming\Claude\claude_desktop_config.json`
@@ -156,10 +157,11 @@ D:\AI\260619_2_Daily_for_stock_TEMP\
 - [ ] 배당 일정 관리 달력
 
 ### 기술 부채
-- [ ] kakao_watcher.py: print() → Global_Define Logger 교체
-- [ ] watcher 비정상 종료 시 자동 재시작 로직
-- [ ] git push 실패 시 재시도 로직
-- [ ] 레지스트리 자동 시작 미작동 이슈 조사 필요
+- [x] kakao_watcher.py: print() → logging 모듈 교체 (watcher.log 파일 기록)
+- [x] watcher 비정상 종료 시 자동 재시작 로직 (observer while True 래퍼)
+- [x] git push 실패 시 3회 재시도 로직
+- [x] 레지스트리 자동 시작 → VBS + 시작 프로그램 폴더 방식으로 전환
+- [x] DIV_CUTOFF 하드코딩 → datetime.now().year-1 자동 계산
 
 ---
 
@@ -181,8 +183,8 @@ logger = Logger(Path(r"D:\AI\260619_2_Daily_for_stock_TEMP\watcher.log"))
 ## 환경 변수 (Windows 사용자 레벨)
 | 변수명 | 용도 |
 |--------|------|
-| NAVER_ID | 이메일 발송 계정 ID |
-| NAVER_PW | 이메일 발송 계정 PW |
+| DAUM_ID | 이메일 발송 계정 ID (hanbogi79) |
+| DAUM_PW | Daum 앱 비밀번호 (mail.daum.net 발급) |
 
 ---
 
