@@ -326,11 +326,15 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         <div class="bg-gray-50 rounded-lg border border-[#E5E7EB] p-4">
           <h3 class="text-sm font-semibold mb-3">📊 계좌별 평가금액 vs 매수금액</h3>
-          <canvas id="accountCompareChart" height="260"></canvas>
+          <div style="position: relative; height: 260px;">
+            <canvas id="accountCompareChart"></canvas>
+          </div>
         </div>
         <div class="bg-gray-50 rounded-lg border border-[#E5E7EB] p-4">
           <h3 class="text-sm font-semibold mb-3">📈 계좌별 수익률 비교</h3>
-          <canvas id="accountReturnChart" height="260"></canvas>
+          <div style="position: relative; height: 260px;">
+            <canvas id="accountReturnChart"></canvas>
+          </div>
         </div>
       </div>
 
@@ -586,7 +590,7 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
     const BASELINE_DATE = (window.KAKAO_PARSED_DATA && window.KAKAO_PARSED_DATA.tradeDateCut) ? window.KAKAO_PARSED_DATA.tradeDateCut : '2026-06-19';
     const BASELINE_TIME = (window.KAKAO_PARSED_DATA && window.KAKAO_PARSED_DATA.tradeTimeCut) ? window.KAKAO_PARSED_DATA.tradeTimeCut : '12:50';
 
-    // 모든 Chart.js 차트 애니메이션 전역 비활성화 (메모리 누수 방지)
+    // Chart.js 전역: 애니메이션 비활성화 (ResizeObserver 루프 방지)
     Chart.defaults.animation = false;
 
     let stocks = [];
