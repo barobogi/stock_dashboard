@@ -12,7 +12,8 @@ LOG_PATH     = REPO_PATH / "cowork_changes.log"
 WATCH_EXTS   = {'.html', '.py', '.md', '.json', '.css', '.js', '.toml'}
 IGNORE_FILES = {'watcher.log', 'cowork_changes.log'}
 IGNORE_DIRS  = {'.git', '__pycache__'}
-DEBOUNCE_SEC = 12  # 연속 저장을 하나로 묶는 대기 시간
+DEBOUNCE_SEC  = 12  # 연속 저장을 하나로 묶는 대기 시간
+STARTUP_GRACE = 8   # 시작 직후 watchdog 초기 스캔 무시 (초)
 
 # ── 로거 ──────────────────────────────────────────────────
 logger = logging.getLogger("cowork_watcher")
@@ -27,6 +28,7 @@ if not logger.handlers:
 
 _timer: threading.Timer | None = None
 _timer_lock = threading.Lock()
+_start_time  = time.time()
 
 # ── git push ───────────────────────────────────────────────
 def _git_push_changes():
@@ -94,6 +96,8 @@ class CoworkHandler(FileSystemEventHandler):
             return
         if p.suffix not in WATCH_EXTS:
             return
+        if time.time() - _start_time < STARTUP_GRACE:
+            return  # 시작 직후 초기 스캔 이벤트 무시
         logger.info(f"  📂 변경 감지: {p.relative_to(REPO_PATH)} — {DEBOUNCE_SEC}초 후 push 예정")
         _schedule_push()
 
