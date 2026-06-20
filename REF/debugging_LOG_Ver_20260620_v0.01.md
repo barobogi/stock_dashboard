@@ -500,3 +500,107 @@ Windows 부팅 → 로그인
 ### 결과
 - 레지스트리 Run 키 → 시작 프로그램 폴더 단축키로 전환
 - 30초 지연으로 Google Drive 마운트 후 안정적 시작
+
+---
+
+## 이슈 #11: git push 실패 시 재시도 없음 — 네트워크 일시 단절 시 손실
+
+### 증상
+- `subprocess.run(['git', 'push'], check=True)` 1회 시도 후 예외 발생 시 그냥 종료
+- 새벽 네트워크 불안정 구간에서 push 실패 시 카카오톡 업데이트 유실
+
+### 수정 내용
+`git_push()` 함수와 `refresh_prices_only()` 내 push 코드 모두 3회 재시도 + 30초 간격 대기 적용
+```python
+for attempt in range(1, 4):
+    try:
+        subprocess.run(['git', 'push'], check=True, timeout=30)
+        log.info("  GitHub push 완료")
+        return True
+    except Exception as e:
+        log.warning(f"  push 실패 ({attempt}/3): {e}")
+        if attempt < 3:
+            time.sleep(30)
+log.error("  push 3회 실패 — 다음 갱신 시 재시도")
+```
+
+### 커밋
+`[pending]`
+
+---
+
+## 이슈 #12: observer 비정상 종료 시 자동 재시작 없음
+
+### 증상
+- watchdog Observer 스레드가 예외로 종료되면 감시 중단
+- 다음 번 카카오톡 파일 저장이 자동 처리되지 않음
+
+### 수정 내용
+메인 루프를 `while True`로 감싸 observer 비정상 종료 시 10초 후 자동 재시작
+```python
+while True:
+    observer = Observer()
+    observer.schedule(handler, folder, recursive=True)
+    observer.start()
+    try:
+        while observer.is_alive():
+            time.sleep(5)
+    except KeyboardInterrupt:
+        observer.stop(); observer.join(); break
+    except Exception as e:
+        log.error(f"  observer 오류: {e} — 10초 후 자동 재시작")
+        observer.stop(); observer.join()
+        time.sleep(10)
+```
+
+### 커밋
+`[pending]`
+
+---
+
+## 이슈 #13: DIV_CUTOFF = "2025-01-01" 하드코딩 — 매년 수동 변경 필요
+
+### 증상
+- 2027년이 되면 2026년 배당이 필터링되어 보이지 않음
+- 매년 1월 수동으로 연도 변경 필요
+
+### 수정 내용
+```python
+# 변경 전
+DIV_CUTOFF = "2025-01-01"
+
+# 변경 후
+DIV_CUTOFF = f"{datetime.now().year - 1}-01-01"  # 전년도 1월1일 자동 계산
+```
+
+### 커밋
+`[pending]`
+
+---
+
+## 이슈 #14: print() 로깅 — watcher.log 파일 미기록, 오류 추적 어려움
+
+### 증상
+- 모든 진단 메시지가 stdout에만 출력
+- VBS로 백그라운드 실행 시 창 없음 → 로그 확인 불가
+- 오류 발생 시 재현이나 추적 어려움
+
+### 수정 내용
+Python 표준 `logging` 모듈로 파일+콘솔 동시 출력
+```python
+def _setup_logger():
+    log_path = Path(r"D:\AI\260619_2_Daily_for_stock_TEMP\watcher.log")
+    logger = logging.getLogger("watcher")
+    fh = logging.FileHandler(log_path, encoding='utf-8')
+    fh.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s', '%Y-%m-%d %H:%M:%S'))
+    ch = logging.StreamHandler(sys.stdout)
+    logger.addHandler(fh); logger.addHandler(ch)
+    return logger
+
+log = _setup_logger()
+```
+- 기존 `print()` → `log.info()` / `log.warning()` / `log.error()` 전면 교체
+- 로그 파일: `D:\AI\260619_2_Daily_for_stock_TEMP\watcher.log`
+
+### 커밋
+`[pending]`

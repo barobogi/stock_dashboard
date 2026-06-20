@@ -1,13 +1,29 @@
 #!/usr/bin/env python3
 # kakao_watcher.py — 카카오톡 파일 자동 감지 → 파싱 → GitHub push → GitHub Pages 배포
 
-import os, re, json, time, sys, subprocess, requests, threading
+import os, re, json, time, sys, subprocess, requests, threading, logging
 from datetime import datetime
 from pathlib import Path
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
 _processing_lock = threading.Lock()
+
+# ── 로거 설정 (파일 + 콘솔 동시 출력) ──────────────────────────
+def _setup_logger():
+    log_path = Path(r"D:\AI\260619_2_Daily_for_stock_TEMP\watcher.log")
+    logger = logging.getLogger("watcher")
+    logger.setLevel(logging.DEBUG)
+    if not logger.handlers:
+        fh = logging.FileHandler(log_path, encoding='utf-8')
+        fh.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s', '%Y-%m-%d %H:%M:%S'))
+        ch = logging.StreamHandler(sys.stdout)
+        ch.setFormatter(logging.Formatter('%(message)s'))
+        logger.addHandler(fh)
+        logger.addHandler(ch)
+    return logger
+
+log = _setup_logger()
 
 # ═══════════════════════════════════════════════════════════
 #  설정 — 본인 환경에 맞게 수정
@@ -51,7 +67,7 @@ US_STOCKS = {
 }
 
 # 파싱 기준
-DIV_CUTOFF        = "2025-01-01"
+DIV_CUTOFF        = f"{datetime.now().year - 1}-01-01"  # 전년도 1월1일 (매년 자동 갱신)
 TRADE_DATE_CUT    = "2026-06-19"
 TRADE_TIME_CUT    = "12:50"
 
@@ -91,7 +107,7 @@ def fetch_exchange_rate():
         r = _sess.get('https://quotation-api-cdn.dunamu.com/v1/forex/recent?codes=FRX.KRWUSD', timeout=5)
         rate = float(r.json()[0].get('basePrice', 0))
         if rate > 1000:
-            print(f"  환율 조회: 1 USD = ₩{rate:,.1f}")
+            log.info(f"  환율 조회: 1 USD = ₩{rate:,.1f}")
             return rate
     except Exception:
         pass
@@ -99,11 +115,11 @@ def fetch_exchange_rate():
         r = _sess.get('https://m.stock.naver.com/front-api/v1/index/info?indexCode=FRX.KRWUSD', timeout=5)
         rate = float(str(r.json().get('result', {}).get('closePrice', '0')).replace(',', ''))
         if rate > 1000:
-            print(f"  환율 조회(Naver): 1 USD = ₩{rate:,.1f}")
+            log.info(f"  환율 조회(Naver): 1 USD = ₩{rate:,.1f}")
             return rate
     except Exception:
         pass
-    print(f"  환율 조회 실패 — 기존값 사용: ₩{EXCHANGE_RATE}")
+    log.warning(f"  환율 조회 실패 — 기존값 사용: ₩{EXCHANGE_RATE}")
     return None
 
 def fetch_prices():
@@ -173,7 +189,7 @@ def fetch_prices():
             json.dump(ticker_map, f, ensure_ascii=False, indent=2)
 
     total = len(KR_STOCKS) + len(US_STOCKS)
-    print(f"  현재가 조회: {len(prices)}/{total}개 성공")
+    log.info(f"  현재가 조회: {len(prices)}/{total}개 성공")
     return prices
 
 # ═══════════════════════════════════════════════════════════
@@ -454,7 +470,7 @@ def parse_kakao(filepath):
                     deposits.append({'accountId': acc3['id'] if acc3 else 0,
                                      'amount': amount3, 'date': cur_date})
 
-    print(f"  파싱 결과: 거래 {len(trades)}건, 배당 {len(dividends)}건, 입금 {len(deposits)}건")
+    log.info(f"  파싱 결과: 거래 {len(trades)}건, 배당 {len(dividends)}건, 입금 {len(deposits)}건")
     return {
         'dividends': dividends,
         'trades': trades,
@@ -487,7 +503,7 @@ def inject_to_html(data):
     html = html.replace('</head>', block + '\n</head>', 1)
 
     Path(DASHBOARD_HTML).write_text(html, encoding='utf-8')
-    print("  HTML 주입 완료")
+    log.info("  HTML 주입 완료")
 
 # ═══════════════════════════════════════════════════════════
 #  GitHub push
@@ -498,16 +514,25 @@ def git_push(data):
     diff = subprocess.run(['git', 'diff', '--cached', '--stat'],
                           capture_output=True, text=True).stdout.strip()
     if not diff:
-        print("  변경사항 없음 — push 생략")
+        log.info("  변경사항 없음 — push 생략")
         return False
 
     msg = (f"auto: KakaoTalk 업데이트 {data['pushedAt'][:16]} "
            f"거래:{len(data['trades'])}건 배당:{len(data['dividends'])}건 "
            f"현재가:{len(data.get('prices',{}))}개")
     subprocess.run(['git', 'commit', '-m', msg], check=True)
-    subprocess.run(['git', 'push'], check=True)
-    print(f"  GitHub push 완료")
-    return True
+
+    for attempt in range(1, 4):
+        try:
+            subprocess.run(['git', 'push'], check=True, timeout=30)
+            log.info("  GitHub push 완료")
+            return True
+        except Exception as e:
+            log.warning(f"  push 실패 ({attempt}/3): {e}")
+            if attempt < 3:
+                time.sleep(30)
+    log.error("  push 3회 실패 — 다음 갱신 시 재시도")
+    return False
 
 # ═══════════════════════════════════════════════════════════
 #  Windows 알림
@@ -532,14 +557,14 @@ $n.Dispose()
 def refresh_prices_only():
     """현재 KAKAO_PARSED_DATA에서 prices + pushedAt만 갱신하여 재주입"""
     with _processing_lock:
-        print(f"\n[{datetime.now().strftime('%H:%M:%S')}] 정시 현재가 자동 갱신")
+        log.info(f"\n[{datetime.now().strftime('%H:%M:%S')}] 정시 현재가 자동 갱신")
         html = Path(DASHBOARD_HTML).read_text(encoding='utf-8')
         m = re.search(
             r'<!-- KAKAO_AUTO:START -->\s*<script>window\.KAKAO_PARSED_DATA=(.+?);</script>\s*<!-- KAKAO_AUTO:END -->',
             html, re.DOTALL
         )
         if not m:
-            print("  KAKAO_PARSED_DATA 없음 — 갱신 건너뜀")
+            log.warning("  KAKAO_PARSED_DATA 없음 — 갱신 건너뜀")
             return
         data = json.loads(m.group(1))
         new_rate = fetch_exchange_rate()
@@ -547,7 +572,7 @@ def refresh_prices_only():
             global EXCHANGE_RATE
             EXCHANGE_RATE = new_rate
         data['exchangeRate'] = EXCHANGE_RATE  # 성공 시 갱신, 실패 시 이전 성공값 유지
-        print("  현재가 조회 중...")
+        log.info("  현재가 조회 중...")
         data['prices']   = fetch_prices()
         data['pushedAt'] = datetime.now().isoformat()
         inject_to_html(data)
@@ -557,14 +582,23 @@ def refresh_prices_only():
         diff = subprocess.run(['git', 'diff', '--cached', '--stat'],
                               capture_output=True, text=True).stdout.strip()
         if not diff:
-            print("  가격 변동 없음 — push 생략")
+            log.info("  가격 변동 없음 — push 생략")
             return
         n = len(data.get('prices', {}))
         subprocess.run(['git', 'commit', '-m',
                         f"auto: 현재가 갱신 {data['pushedAt'][:16]} 현재가:{n}개"], check=True)
-        subprocess.run(['git', 'push'], check=True)
-        print(f"  ✅ 현재가 갱신 완료 ({n}개)")
-        notify("📈 현재가 갱신", f"{n}개 종목 업데이트 · GitHub Pages 반영 중")
+        for attempt in range(1, 4):
+            try:
+                subprocess.run(['git', 'push'], check=True, timeout=30)
+                log.info(f"  ✅ 현재가 갱신 완료 ({n}개)")
+                notify("📈 현재가 갱신", f"{n}개 종목 업데이트 · GitHub Pages 반영 중")
+                break
+            except Exception as e:
+                log.warning(f"  push 실패 ({attempt}/3): {e}")
+                if attempt < 3:
+                    time.sleep(30)
+        else:
+            log.error("  push 3회 실패 — 다음 정시 갱신 시 재시도")
 
 def _hourly_price_refresh_loop():
     """매 정시에 현재가 갱신 (백그라운드 스레드)"""
@@ -575,14 +609,14 @@ def _hourly_price_refresh_loop():
         try:
             refresh_prices_only()
         except Exception as e:
-            print(f"  ❌ 정시 갱신 오류: {e}")
+            log.error(f"  ❌ 정시 갱신 오류: {e}")
 
 # ═══════════════════════════════════════════════════════════
 #  파일 처리 파이프라인
 # ═══════════════════════════════════════════════════════════
 def process_file(filepath):
-    print(f"\n{'='*55}")
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] 처리 시작: {Path(filepath).name}")
+    log.info(f"\n{'='*55}")
+    log.info(f"[{datetime.now().strftime('%H:%M:%S')}] 처리 시작: {Path(filepath).name}")
     try:
         with _processing_lock:
             new_rate = fetch_exchange_rate()
@@ -591,7 +625,7 @@ def process_file(filepath):
                 EXCHANGE_RATE = new_rate
             data = parse_kakao(filepath)
             data['exchangeRate'] = EXCHANGE_RATE  # 성공 시 갱신, 실패 시 이전 성공값 유지
-            print("  현재가 조회 중...")
+            log.info("  현재가 조회 중...")
             data['prices'] = fetch_prices()
             inject_to_html(data)
             pushed = git_push(data)
@@ -600,12 +634,12 @@ def process_file(filepath):
         if pushed:
             notify("📈 대시보드 자동 업데이트 완료",
                    f"거래 {t}건 · 배당 {d}건 → GitHub Pages 반영 중 (2~3분)")
-            print(f"  ✅ 완료! GitHub Pages 배포 진행 중")
+            log.info(f"  ✅ 완료! GitHub Pages 배포 진행 중")
         else:
             notify("📈 파싱 완료 (변경 없음)", f"거래 {t}건 · 배당 {d}건")
-            print(f"  ✅ 파싱 완료 (데이터 동일, push 생략)")
+            log.info(f"  ✅ 파싱 완료 (데이터 동일, push 생략)")
     except Exception as e:
-        print(f"  ❌ 오류: {e}")
+        log.error(f"  ❌ 오류: {e}")
         notify("업데이트 오류", str(e)[:80])
         raise
 
@@ -633,7 +667,7 @@ class GDriveHandler(FileSystemEventHandler):
         except Exception:
             first = ''
         if '카카오톡' not in first and 'KakaoTalk' not in first:
-            print(f"  ⏭️  카카오톡 파일 아님, 건너뜀: {name}")
+            log.info(f"  ⏭️  카카오톡 파일 아님, 건너뜀: {name}")
             return
         process_file(path)
 
@@ -653,43 +687,54 @@ def main():
             if Path(arg).exists():
                 process_file(arg)
             else:
-                print(f"파일 없음: {arg}")
+                log.warning(f"파일 없음: {arg}")
         return
 
     # 감시 모드
     folder = GDRIVE_FOLDER
     if not Path(folder).exists():
-        print(f"❌ Google Drive 폴더를 찾을 수 없습니다: {folder}")
-        print("   GDRIVE_FOLDER 경로를 스크립트 상단에서 수정하세요.")
-        print("   Google Drive 앱 → 설정 → 동기화 폴더 에서 경로 확인")
+        log.error(f"❌ Google Drive 폴더를 찾을 수 없습니다: {folder}")
+        log.error("   GDRIVE_FOLDER 경로를 스크립트 상단에서 수정하세요.")
+        log.error("   Google Drive 앱 → 설정 → 동기화 폴더 에서 경로 확인")
         sys.exit(1)
 
-    print("=" * 55)
-    print("📂 카카오톡 자동 업데이트 워처 시작")
-    print(f"   감시 폴더 : {folder}")
-    print(f"   저장소    : {REPO_PATH}")
-    print(f"   파일 키워드: *{KAKAO_KEYWORD}*.txt")
-    print("=" * 55)
-    print("카카오톡 → 내보내기 → Google Drive 저장 시 자동 처리됩니다.")
-    print("종료: Ctrl+C\n")
+    log.info("=" * 55)
+    log.info("📂 카카오톡 자동 업데이트 워처 시작")
+    log.info(f"   감시 폴더 : {folder}")
+    log.info(f"   저장소    : {REPO_PATH}")
+    log.info(f"   파일 키워드: *{KAKAO_KEYWORD}*.txt")
+    log.info("=" * 55)
+    log.info("카카오톡 → 내보내기 → Google Drive 저장 시 자동 처리됩니다.")
+    log.info("종료: Ctrl+C\n")
 
     # 매 정시 현재가 자동 갱신 백그라운드 스레드
     t = threading.Thread(target=_hourly_price_refresh_loop, daemon=True)
     t.start()
     now = datetime.now()
     mins_left = 60 - now.minute
-    print(f"  ⏰ 매 정시 현재가 자동 갱신 활성화 (다음 갱신: {mins_left}분 후)")
+    log.info(f"  ⏰ 매 정시 현재가 자동 갱신 활성화 (다음 갱신: {mins_left}분 후)")
 
-    handler  = GDriveHandler()
-    observer = Observer()
-    observer.schedule(handler, folder, recursive=True)
-    observer.start()
-    try:
-        while True: time.sleep(1)
-    except KeyboardInterrupt:
-        print("\n워처 종료")
-    finally:
-        observer.stop(); observer.join()
+    while True:
+        handler  = GDriveHandler()
+        observer = Observer()
+        observer.schedule(handler, folder, recursive=True)
+        observer.start()
+        log.info("  👀 파일 감시 시작")
+        try:
+            while observer.is_alive():
+                time.sleep(5)
+                if not observer.is_alive():
+                    raise RuntimeError("observer 비정상 종료")
+        except KeyboardInterrupt:
+            log.info("\n워처 종료 (Ctrl+C)")
+            observer.stop()
+            observer.join()
+            break
+        except Exception as e:
+            log.error(f"  observer 오류: {e} — 10초 후 자동 재시작")
+            observer.stop()
+            observer.join()
+            time.sleep(10)
 
 if __name__ == '__main__':
     main()
