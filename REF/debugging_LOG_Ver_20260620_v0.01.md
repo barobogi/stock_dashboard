@@ -271,10 +271,39 @@ _accReturnChart = new Chart(canvas2, {
 });
 ```
 
+### 1차 수정 (불완전)
+```javascript
+Chart.defaults.animation = false;  // 애니메이션은 꺼졌으나
+// responsive: true + 컨테이너 고정 높이 없음 → ResizeObserver 루프 지속
+```
+커밋: `1b06aee`
+
+### 2차 수정 (근본 해결)
+`responsive: true` + `maintainAspectRatio: false` 차트는 컨테이너 높이를 기준으로 크기 계산.
+컨테이너에 CSS 고정 높이가 없으면 캔버스 크기 변화 → ResizeObserver 감지 → 재렌더 → 크기 변화 → 무한 루프.
+
+**Chart.js 공식 권장 방식**: 캔버스를 `position:relative; height:Xpx` div로 감싸기
+
+```html
+<!-- 수정 전: 컨테이너 높이 미지정 -->
+<div class="...p-4">
+  <canvas id="accountCompareChart" height="260"></canvas>
+</div>
+
+<!-- 수정 후: 고정 높이 래퍼 추가 -->
+<div class="...p-4">
+  <div style="position: relative; height: 260px;">
+    <canvas id="accountCompareChart"></canvas>
+  </div>
+</div>
+```
+동일 패턴을 `accountReturnChart`에도 적용. (`evalHistoryChart`는 이미 래퍼 있어 정상)
+
 ### 결과
-- 차트 최초 렌더 후 고정 표시 (움직임 없음)
-- ResizeObserver 루프 차단 → CPU/메모리 안정화
-- 전역 설정(`Chart.defaults.animation = false`)으로 기존 탭 모든 차트에도 동일 효과 적용
+- ResizeObserver가 260px 고정 래퍼를 감시 → 높이 불변 → 루프 종료
+- 차트 최초 렌더 후 완전 고정 표시
+- CPU/메모리 안정화
 
 ### 커밋
-`1b06aee fix: 계좌비교 차트 애니메이션 루프 → 메모리 과소비 수정 (Chart.defaults.animation=false)`
+- `1b06aee` animation 비활성화 (1차)
+- `d5234dc` canvas 고정 높이 래퍼 (근본 해결)
