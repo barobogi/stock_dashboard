@@ -453,6 +453,44 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
       </div>
     </div>
 
+    <!-- TAB: DIVIDEND CALENDAR -->
+    <div id="divcal" class="tab-content bg-white border border-t-0 border-[#E5E7EB] rounded-b-lg p-6 hidden">
+
+      <!-- 연간 요약 바 -->
+      <div class="mb-6">
+        <h3 class="text-sm font-semibold mb-3">📊 월별 배당금 현황 (<span id="calYear"></span>년)</h3>
+        <div class="grid grid-cols-12 gap-1 items-end h-24" id="calMonthBars"></div>
+        <div class="grid grid-cols-12 gap-1 mt-1 text-center text-xs text-gray-400">
+          <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span>
+          <span>7</span><span>8</span><span>9</span><span>10</span><span>11</span><span>12</span>
+        </div>
+      </div>
+
+      <!-- 네비게이션 + 달력 -->
+      <div class="flex items-center justify-between mb-3">
+        <button onclick="calPrev()" class="px-3 py-1.5 text-xs border border-[#E5E7EB] rounded hover:bg-gray-50">◀ 이전달</button>
+        <span id="calTitle" class="text-sm font-semibold"></span>
+        <button onclick="calNext()" class="px-3 py-1.5 text-xs border border-[#E5E7EB] rounded hover:bg-gray-50">다음달 ▶</button>
+      </div>
+
+      <div class="grid grid-cols-7 mb-1">
+        <div class="text-center text-xs font-medium text-red-400 py-1">일</div>
+        <div class="text-center text-xs font-medium text-gray-500 py-1">월</div>
+        <div class="text-center text-xs font-medium text-gray-500 py-1">화</div>
+        <div class="text-center text-xs font-medium text-gray-500 py-1">수</div>
+        <div class="text-center text-xs font-medium text-gray-500 py-1">목</div>
+        <div class="text-center text-xs font-medium text-gray-500 py-1">금</div>
+        <div class="text-center text-xs font-medium text-blue-400 py-1">토</div>
+      </div>
+      <div id="calGrid" class="grid grid-cols-7 gap-1 mb-5"></div>
+
+      <!-- 이번 달 배당 내역 -->
+      <div>
+        <h3 class="text-sm font-semibold mb-2">📋 <span id="calMonthLabel"></span> 배당 내역</h3>
+        <div id="calDetail" class="space-y-1"></div>
+      </div>
+    </div>
+
     <div id="import" class="tab-content bg-white border border-t-0 border-[#E5E7EB] rounded-b-lg p-6 hidden">
       <div class="mb-6">
         <h2 class="text-sm font-semibold mb-2">📂 잔고증명서 CSV 불러오기</h2>
@@ -914,6 +952,7 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
         if (name === 'dividends') renderDividendChart();
         if (name === 'accounts') renderAccountComparison();
         if (name === 'tax') renderTaxOptimization();
+        if (name === 'divcal') renderDivCal();
       }, 100);
     }
 
