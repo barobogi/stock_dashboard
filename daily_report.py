@@ -1,7 +1,7 @@
 """
 매일 오후 7시 주식 일일 보고서 생성·발송 + 일간 스냅샷 저장
 Windows 작업 스케줄러로 실행: python daily_report.py
-네이버 메일 SMTP 사용 (환경변수 NAVER_ID, NAVER_PW)
+Daum 메일 SMTP 사용 (환경변수 DAUM_ID, DAUM_PW)
 """
 import sys, os, re, json, smtplib, datetime
 from email.mime.multipart import MIMEMultipart
@@ -15,13 +15,13 @@ REPO_PATH      = r"D:\AI\260619_2_Daily_for_stock_TEMP"
 DASHBOARD_HTML = os.path.join(REPO_PATH, "stock-dashboard.html")
 SNAPSHOT_FILE  = os.path.join(REPO_PATH, "daily_snapshot.json")
 TO_EMAIL       = "barobogi79@gmail.com"
-# 네이버 메일 SMTP — 환경변수 등록:
-#   [System.Environment]::SetEnvironmentVariable("NAVER_ID","네이버아이디","User")
-#   [System.Environment]::SetEnvironmentVariable("NAVER_PW","네이버비밀번호","User")
-NAVER_ID = os.environ.get("NAVER_ID", "")
-NAVER_PW = os.environ.get("NAVER_PW", "")
-FROM_EMAIL = f"{NAVER_ID}@naver.com" if NAVER_ID else ""
-SMTP_HOST  = "smtp.naver.com"
+# Daum 메일 SMTP — 환경변수 등록 (PowerShell):
+#   [System.Environment]::SetEnvironmentVariable("DAUM_ID","daum아이디","User")
+#   [System.Environment]::SetEnvironmentVariable("DAUM_PW","daum비밀번호","User")
+DAUM_ID    = os.environ.get("DAUM_ID", "")
+DAUM_PW    = os.environ.get("DAUM_PW", "")
+FROM_EMAIL = f"{DAUM_ID}@daum.net" if DAUM_ID else ""
+SMTP_HOST  = "smtp.daum.net"
 SMTP_PORT  = 465
 
 ACCOUNTS = [
@@ -227,7 +227,7 @@ def build_html(r):
 
 <p style="text-align:center;color:#9ca3af;font-size:11px;margin-top:20px;">
   Barobogi Stock Dashboard · 매일 오후 7시 자동 발송<br>
-  <a href="https://barobogi.netlify.app" style="color:#3b82f6;">대시보드 바로가기</a>
+  <a href="https://barobogi.github.io/stock_dashboard/stock-dashboard.html" style="color:#3b82f6;">대시보드 바로가기</a>
 </p>
 </body></html>"""
 
@@ -239,7 +239,7 @@ def send_email(subject, html_body):
     msg['To']      = TO_EMAIL
     msg.attach(MIMEText(html_body, 'html', 'utf-8'))
     with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT) as s:
-        s.login(NAVER_ID, NAVER_PW)
+        s.login(DAUM_ID, DAUM_PW)
         s.sendmail(FROM_EMAIL, TO_EMAIL, msg.as_string())
 
 # ── 메인 ─────────────────────────────────────────────────────
@@ -254,13 +254,12 @@ def main():
     print(f"  오늘 거래:  {len(r['today_trades'])}건")
     print(f"  오늘 배당:  {len(r['today_divs'])}건 ₩{r['today_div_total']:,}")
 
-    # 네이버 계정 확인
-    if not NAVER_ID or not NAVER_PW:
-        print("\n⚠️  네이버 계정 환경변수 미설정. 이메일 발송 생략.")
+    # Daum 계정 확인
+    if not DAUM_ID or not DAUM_PW:
+        print("\n⚠️  Daum 계정 환경변수 미설정. 이메일 발송 생략.")
         print("  PowerShell 환경변수 등록 (한 번만):")
-        print('  [System.Environment]::SetEnvironmentVariable("NAVER_ID","네이버아이디","User")')
-        print('  [System.Environment]::SetEnvironmentVariable("NAVER_PW","네이버비밀번호","User")')
-        print("  네이버 메일 → 환경설정 → POP3/SMTP → SMTP 사용함 설정 필요")
+        print('  [System.Environment]::SetEnvironmentVariable("DAUM_ID","daum아이디","User")')
+        print('  [System.Environment]::SetEnvironmentVariable("DAUM_PW","daum비밀번호","User")')
     else:
         subject = (f"[Barobogi] 주식 일일 보고서 {r['today']} "
                    f"₩{r['total_eval']:,} ({'+' if r['daily_pct']>=0 else ''}{r['daily_pct']:.2f}%)")
