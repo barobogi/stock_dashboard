@@ -71,6 +71,7 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
       <button onclick="switchTab('returns')" class="tab-button px-5 py-3 text-sm font-medium tab-inactive" data-tab="returns">📈 수익률</button>
       <button onclick="switchTab('dividends')" class="tab-button px-5 py-3 text-sm font-medium tab-inactive" data-tab="dividends">💵 배당금</button>
       <button onclick="switchTab('trades')" class="tab-button px-5 py-3 text-sm font-medium tab-inactive" data-tab="trades">📋 당일 거래</button>
+      <button onclick="switchTab('accounts')" class="tab-button px-5 py-3 text-sm font-medium tab-inactive" data-tab="accounts">🏦 계좌비교</button>
       <button onclick="switchTab('import')" class="tab-button px-5 py-3 text-sm font-medium tab-inactive" data-tab="import">📂 파일 불러오기</button>
       <button onclick="switchTab('settings')" class="tab-button px-5 py-3 text-sm font-medium tab-inactive" data-tab="settings">⚙️ 관리</button>
     </div>
@@ -145,7 +146,7 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
           <canvas id="pnlChart" height="200"></canvas>
         </div>
       </div>
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         <div>
           <h2 class="text-sm font-semibold mb-3">💰 종목별 누적 배당 Top 10</h2>
           <canvas id="stockDivChart" height="220"></canvas>
@@ -154,6 +155,19 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
           <h2 class="text-sm font-semibold mb-3">🏦 계좌별 월별 배당 추이</h2>
           <canvas id="accDivChart" height="220"></canvas>
         </div>
+      </div>
+
+      <!-- 포트폴리오 히트맵 -->
+      <div class="bg-gray-50 rounded-lg border border-[#E5E7EB] p-4">
+        <div class="flex justify-between items-center mb-3">
+          <h2 class="text-sm font-semibold">🗺️ 포트폴리오 히트맵 <span class="text-gray-400 font-normal text-xs">(타일 크기=평가금액, 색상=수익률)</span></h2>
+          <div class="flex items-center gap-2 text-xs text-gray-400">
+            <span style="display:inline-block;width:12px;height:12px;background:#b00020;border-radius:2px;"></span>손실
+            <span style="display:inline-block;width:12px;height:12px;background:#555;border-radius:2px;"></span>보합
+            <span style="display:inline-block;width:12px;height:12px;background:#008040;border-radius:2px;"></span>수익
+          </div>
+        </div>
+        <div id="heatmapContainer" class="flex flex-wrap gap-1" style="min-height:100px;"></div>
       </div>
     </div>
 
@@ -298,6 +312,32 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
             <p id="tradeTotalCount" class="text-lg font-bold mt-1 text-purple-600">0건</p>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- TAB: ACCOUNTS -->
+    <div id="accounts" class="tab-content bg-white border border-t-0 border-[#E5E7EB] rounded-b-lg p-6 hidden">
+      <h2 class="text-sm font-semibold mb-4">🏦 계좌별 비교 대시보드</h2>
+
+      <!-- 계좌별 요약 카드 -->
+      <div id="accountCompareCards" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6"></div>
+
+      <!-- 계좌별 평가금액 vs 매수금액 차트 -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <div class="bg-gray-50 rounded-lg border border-[#E5E7EB] p-4">
+          <h3 class="text-sm font-semibold mb-3">📊 계좌별 평가금액 vs 매수금액</h3>
+          <canvas id="accountCompareChart" height="260"></canvas>
+        </div>
+        <div class="bg-gray-50 rounded-lg border border-[#E5E7EB] p-4">
+          <h3 class="text-sm font-semibold mb-3">📈 계좌별 수익률 비교</h3>
+          <canvas id="accountReturnChart" height="260"></canvas>
+        </div>
+      </div>
+
+      <!-- 계좌별 TOP3 종목 -->
+      <div class="bg-gray-50 rounded-lg border border-[#E5E7EB] p-4">
+        <h3 class="text-sm font-semibold mb-3">🏆 계좌별 TOP3 수익 종목</h3>
+        <div id="accountTop3Section" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
       </div>
     </div>
 
@@ -756,8 +796,9 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
       document.querySelector(`[data-tab="${name}"]`).classList.add('tab-active');
       document.querySelector(`[data-tab="${name}"]`).classList.remove('tab-inactive');
       setTimeout(() => {
-        if (name === 'dashboard') { renderAccountPieChart(); renderStockPieChart(); renderPnlChart(); }
+        if (name === 'dashboard') { renderAccountPieChart(); renderStockPieChart(); renderPnlChart(); renderHeatmap(); }
         if (name === 'dividends') renderDividendChart();
+        if (name === 'accounts') renderAccountComparison();
       }, 100);
     }
 
@@ -1234,6 +1275,7 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
       renderReturns();
       renderNextMonthDist();
       renderFireProgress();
+      renderHeatmap();
       checkAutoSnapshot();
     }
 
@@ -1348,6 +1390,148 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
       saveToStorage();
       renderReturns();
       if (type === '수동') alert(`스냅샷 저장 완료 (${date} ${time})`);
+    }
+
+    function renderHeatmap() {
+      const container = document.getElementById('heatmapContainer');
+      if (!container) return;
+      const active = stocks.filter(s => (s.evalAmount || 0) > 0);
+      if (!active.length) { container.innerHTML = '<p class="text-gray-400 text-sm">데이터 없음</p>'; return; }
+      const totalEval = active.reduce((s, x) => s + x.evalAmount, 0);
+
+      function heatColor(pct) {
+        const c = Math.max(-20, Math.min(20, pct));
+        if (c >= 0) {
+          const g = Math.round(100 + c / 20 * 100);
+          return `rgb(0,${g + 55},${Math.round(40 + c)})`;
+        } else {
+          const r = Math.round(140 + (-c) / 20 * 100);
+          return `rgb(${r},${Math.round(20 - c)},30)`;
+        }
+      }
+
+      const sorted = [...active].sort((a, b) => (b.evalAmount || 0) - (a.evalAmount || 0));
+      container.innerHTML = sorted.map(s => {
+        const pct = totalEval > 0 ? s.evalAmount / totalEval * 100 : 0;
+        const profit = (s.evalAmount || 0) - (s.buyAmount || 0);
+        const profitPct = (s.buyAmount || 0) > 0 ? profit / s.buyAmount * 100 : 0;
+        const color = heatColor(profitPct);
+        const h = pct > 10 ? 90 : pct > 5 ? 70 : pct > 2 ? 56 : 44;
+        const sign = profitPct >= 0 ? '+' : '';
+        const acc = ACCOUNTS.find(a => a.id === s.accountId);
+        return `<div onclick="switchTab('portfolio')"
+          title="${s.name}\n평가: ₩${(s.evalAmount||0).toLocaleString()}\n수익률: ${sign}${profitPct.toFixed(2)}%\n손익: ${sign}₩${Math.abs(profit).toLocaleString()}\n계좌: ${acc?.name||''}"
+          style="flex:0 0 calc(${Math.max(pct,1.2)}% - 4px);min-width:52px;height:${h}px;background:${color};border-radius:5px;padding:4px 5px;color:white;font-size:10px;cursor:pointer;overflow:hidden;box-sizing:border-box;transition:opacity .15s;" onmouseover="this.style.opacity='.8'" onmouseout="this.style.opacity='1'">
+          <div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.3;">${s.name}</div>
+          <div style="font-size:11px;font-weight:700;">${sign}${profitPct.toFixed(1)}%</div>
+        </div>`;
+      }).join('');
+    }
+
+    let _accCompareChart = null, _accReturnChart = null;
+    function renderAccountComparison() {
+      const cards = document.getElementById('accountCompareCards');
+      const top3Section = document.getElementById('accountTop3Section');
+      if (!cards) return;
+
+      const accData = ACCOUNTS.map(acc => {
+        const accStocks = stocks.filter(s => s.accountId === acc.id && (s.evalAmount || 0) > 0);
+        const eval_ = accStocks.reduce((s, x) => s + (x.evalAmount || 0), 0);
+        const inv   = accStocks.reduce((s, x) => s + (x.buyAmount  || 0), 0);
+        const pnl   = eval_ - inv;
+        const pnlPct = inv > 0 ? pnl / inv * 100 : 0;
+        const accDivs = dividends.filter(d => d.accountId === acc.id);
+        const totalDiv = accDivs.reduce((s, d) => s + (d.netAmount || 0), 0);
+        const top3 = [...accStocks].sort((a, b) => {
+          const pa = (a.buyAmount||0) > 0 ? (a.evalAmount-a.buyAmount)/a.buyAmount : 0;
+          const pb = (b.buyAmount||0) > 0 ? (b.evalAmount-b.buyAmount)/b.buyAmount : 0;
+          return pb - pa;
+        }).slice(0, 3);
+        return { ...acc, eval_, inv, pnl, pnlPct, totalDiv, top3, count: accStocks.length };
+      }).filter(a => a.eval_ > 0);
+
+      // 요약 카드
+      cards.innerHTML = accData.map(a => {
+        const sign = a.pnl >= 0 ? '+' : '';
+        const color = a.pnl >= 0 ? 'text-green-600' : 'text-red-500';
+        return `<div class="bg-gray-50 rounded-lg border border-[#E5E7EB] p-3">
+          <p class="text-xs text-gray-500 font-medium truncate">${a.name}</p>
+          <p class="text-base font-bold mt-1">₩${Math.round(a.eval_/10000).toLocaleString()}만</p>
+          <p class="text-xs ${color} mt-0.5">${sign}${a.pnlPct.toFixed(1)}% (${sign}₩${Math.abs(Math.round(a.pnl/10000)).toLocaleString()}만)</p>
+          <p class="text-xs text-blue-500 mt-0.5">배당 ₩${Math.round(a.totalDiv/10000).toLocaleString()}만</p>
+        </div>`;
+      }).join('');
+
+      // 계좌별 평가 vs 매수 차트
+      const labels = accData.map(a => a.name);
+      const evalData = accData.map(a => Math.round(a.eval_ / 10000));
+      const invData  = accData.map(a => Math.round(a.inv  / 10000));
+      const canvas1 = document.getElementById('accountCompareChart');
+      if (canvas1) {
+        if (_accCompareChart) { _accCompareChart.destroy(); _accCompareChart = null; }
+        _accCompareChart = new Chart(canvas1, {
+          type: 'bar',
+          data: {
+            labels,
+            datasets: [
+              { label: '평가금액(만원)', data: evalData, backgroundColor: 'rgba(79,70,229,0.7)', borderRadius: 4 },
+              { label: '매수금액(만원)', data: invData,  backgroundColor: 'rgba(156,163,175,0.6)', borderRadius: 4 },
+            ]
+          },
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { labels: { font: { size: 11 } } } },
+            scales: {
+              x: { ticks: { font: { size: 10 }, maxRotation: 30 } },
+              y: { ticks: { callback: v => `${v.toLocaleString()}만`, font: { size: 10 } } }
+            }
+          }
+        });
+      }
+
+      // 수익률 가로 바 차트
+      const canvas2 = document.getElementById('accountReturnChart');
+      if (canvas2) {
+        if (_accReturnChart) { _accReturnChart.destroy(); _accReturnChart = null; }
+        _accReturnChart = new Chart(canvas2, {
+          type: 'bar',
+          data: {
+            labels,
+            datasets: [{
+              label: '수익률(%)',
+              data: accData.map(a => parseFloat(a.pnlPct.toFixed(2))),
+              backgroundColor: accData.map(a => a.pnl >= 0 ? 'rgba(0,160,80,0.7)' : 'rgba(200,0,40,0.7)'),
+              borderRadius: 4,
+            }]
+          },
+          options: {
+            indexAxis: 'y',
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+              x: { ticks: { callback: v => `${v}%`, font: { size: 10 } } },
+              y: { ticks: { font: { size: 10 } } }
+            }
+          }
+        });
+      }
+
+      // TOP3 종목 카드
+      top3Section.innerHTML = accData.map(a => {
+        const rows = a.top3.map(s => {
+          const p = (s.buyAmount||0) > 0 ? (s.evalAmount-s.buyAmount)/s.buyAmount*100 : 0;
+          const sign = p >= 0 ? '+' : '';
+          const color = p >= 0 ? 'text-green-600' : 'text-red-500';
+          return `<div class="flex justify-between text-xs py-1 border-b border-gray-100 last:border-0">
+            <span class="truncate mr-2 text-gray-700">${s.name}</span>
+            <span class="${color} font-semibold whitespace-nowrap">${sign}${p.toFixed(1)}%</span>
+          </div>`;
+        }).join('');
+        return `<div class="bg-white rounded-lg border border-[#E5E7EB] p-3">
+          <p class="text-xs font-semibold text-gray-700 mb-2">${a.name} <span class="text-gray-400 font-normal">(${a.count}종목)</span></p>
+          ${rows || '<p class="text-xs text-gray-400">종목 없음</p>'}
+        </div>`;
+      }).join('');
     }
 
     let _evalHistoryChart = null;
