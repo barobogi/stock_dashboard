@@ -12,7 +12,7 @@ _processing_lock = threading.Lock()
 # ═══════════════════════════════════════════════════════════
 #  설정 — 본인 환경에 맞게 수정
 # ═══════════════════════════════════════════════════════════
-MYBOX_FOLDER   = r"G:\내 드라이브\KakaoTalk"                  # Google Drive 가상 드라이브
+GDRIVE_FOLDER  = r"G:\내 드라이브\KakaoTalk"                  # Google Drive 가상 드라이브
 REPO_PATH      = r"D:\AI\260619_2_Daily_for_stock_TEMP"     # Git 저장소 경로
 DASHBOARD_HTML = os.path.join(REPO_PATH, "stock-dashboard.html")
 TICKER_MAP_FILE= os.path.join(REPO_PATH, "ticker_map.json")
@@ -613,7 +613,7 @@ def process_file(filepath):
 # ═══════════════════════════════════════════════════════════
 #  Watchdog 핸들러
 # ═══════════════════════════════════════════════════════════
-class MYBOXHandler(FileSystemEventHandler):
+class GDriveHandler(FileSystemEventHandler):
     def __init__(self):
         self._done = set()
 
@@ -658,11 +658,11 @@ def main():
         return
 
     # 감시 모드
-    folder = MYBOX_FOLDER
+    folder = GDRIVE_FOLDER
     if not Path(folder).exists():
-        print(f"❌ MYBOX 폴더를 찾을 수 없습니다: {folder}")
-        print("   MYBOX_FOLDER 경로를 스크립트 상단에서 수정하세요.")
-        print("   네이버 MYBOX 앱 → 설정 → PC 동기화 폴더 에서 경로 확인")
+        print(f"❌ Google Drive 폴더를 찾을 수 없습니다: {folder}")
+        print("   GDRIVE_FOLDER 경로를 스크립트 상단에서 수정하세요.")
+        print("   Google Drive 앱 → 설정 → 동기화 폴더 에서 경로 확인")
         sys.exit(1)
 
     print("=" * 55)
@@ -671,7 +671,7 @@ def main():
     print(f"   저장소    : {REPO_PATH}")
     print(f"   파일 키워드: *{KAKAO_KEYWORD}*.txt")
     print("=" * 55)
-    print("카카오톡 → 내보내기 → MYBOX 저장 시 자동 처리됩니다.")
+    print("카카오톡 → 내보내기 → Google Drive 저장 시 자동 처리됩니다.")
     print("종료: Ctrl+C\n")
 
     # 매 정시 현재가 자동 갱신 백그라운드 스레드
@@ -681,7 +681,7 @@ def main():
     mins_left = 60 - now.minute
     print(f"  ⏰ 매 정시 현재가 자동 갱신 활성화 (다음 갱신: {mins_left}분 후)")
 
-    handler  = MYBOXHandler()
+    handler  = GDriveHandler()
     observer = Observer()
     observer.schedule(handler, folder, recursive=True)
     observer.start()
