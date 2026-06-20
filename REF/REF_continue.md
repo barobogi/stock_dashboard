@@ -6,14 +6,14 @@
 ---
 
 ## 프로젝트 개요
-삼성증권 7개 계좌 포트폴리오를 카카오톡 알림 → 자동 파싱 → GitHub → Netlify 대시보드로 시각화하는 자동화 시스템.
+삼성증권 7개 계좌 포트폴리오를 카카오톡 알림 → 자동 파싱 → GitHub → GitHub Pages 대시보드로 시각화하는 자동화 시스템.
 
 ---
 
 ## 핵심 파일 구조
 ```
 D:\AI\260619_2_Daily_for_stock_TEMP\
-├── stock-dashboard.html       # 메인 대시보드 (단일 HTML, Netlify 배포)
+├── stock-dashboard.html       # 메인 대시보드 (단일 HTML, GitHub Pages 배포)
 ├── kakao_watcher.py           # 카카오톡 파일 감지 → 파싱 → HTML 업데이트 → git push
 ├── daily_report.py            # 매일 오후 7시 이메일 보고서 + 스냅샷 저장
 ├── register_daily_report.ps1  # 작업 스케줄러 등록 스크립트 (관리자 실행 필요)
@@ -33,7 +33,7 @@ D:\AI\260619_2_Daily_for_stock_TEMP\
         → parse_kakao() : 거래/배당/입금 파싱
         → fetch_prices() : Naver API(국내) + yfinance(해외)
         → inject_to_html() : <!-- KAKAO_AUTO:START/END --> 블록 갱신
-        → git push → GitHub → Netlify 자동 배포
+        → git push → GitHub → GitHub Pages 자동 배포
     → 매 정시: refresh_prices_only() 백그라운드 스레드
     → 매일 7시: daily_report.py (작업 스케줄러)
 ```
@@ -130,5 +130,7 @@ logger = Logger(Path(r"D:\AI\260619_2_Daily_for_stock_TEMP\watcher.log"))
 ## Git / 배포
 - GitHub: `https://github.com/barobogi/stock_dashboard`
 - Branch: `main`
-- Netlify: GitHub 연동 자동 배포 (push 후 1~2분)
+- GitHub Pages: GitHub 연동 자동 배포 (push 후 2~3분)
+  URL: https://barobogi.github.io/stock_dashboard/stock-dashboard.html
+  (Netlify 중단 이유: 무료 플랜 빌드 크레딧 300분/월 초과)
 - 작업 스케줄러: `StockDailyReport` (매일 19:00, daily_report.py 실행)

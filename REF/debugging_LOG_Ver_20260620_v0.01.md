@@ -193,3 +193,34 @@ watcher → HTML 업데이트 → GitHub push → Netlify 빌드
 
 ### 커밋
 `dbc7820 fix: HTML 캐시 비활성화 (Netlify CDN 캐시 문제 해결)`
+
+---
+
+## 이슈 #5: Netlify 빌드 크레딧 초과 → GitHub Pages 전환
+
+### 증상
+- Netlify Deploy 목록에서 "Skipped due to account credit usage exceeded" 표시
+- 어제 20:40 이후 모든 배포 skip — 브라우저에 구버전 지속 표시
+- Trigger deploy 수동 시도도 skip
+
+### 원인 분석
+- Netlify 무료 플랜: 빌드 크레딧 **300분/월** 제한
+- kakao_watcher가 매 정시 push → 하루 최대 24번 Netlify 빌드 트리거
+- 누적 빌드 시간이 300분 초과 → 모든 배포 자동 skip
+
+### 해결 방법
+**GitHub Pages로 전환** (완전 무료, 크레딧 제한 없음)
+1. GitHub → stock_dashboard 저장소 → Settings → Pages
+2. Source: Deploy from a branch / Branch: main / Folder: / (root) → Save
+
+**변경 사항:**
+- 대시보드 URL: `https://barobogi-stock-dashboard.netlify.app/` → `https://barobogi.github.io/stock_dashboard/stock-dashboard.html`
+- kakao_watcher.py 알림 메시지: "Netlify 배포 중" → "GitHub Pages 반영 중"
+- REF_continue.md, IMPROVEMENT_PROPOSAL 내 URL 전체 업데이트
+
+### 결과
+- GitHub Pages 정상 작동 확인: "2026.06.20 09:29 기준 (자동업데이트)" 표시
+- 빌드 크레딧 제한 없이 매 정시 자동 갱신 가능
+
+### 커밋
+`4b2a9eb fix: Netlify → GitHub Pages URL 전환`
