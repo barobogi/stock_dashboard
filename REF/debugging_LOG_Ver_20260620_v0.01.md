@@ -224,3 +224,57 @@ watcher → HTML 업데이트 → GitHub push → Netlify 빌드
 
 ### 커밋
 `4b2a9eb fix: Netlify → GitHub Pages URL 전환`
+
+---
+
+## 이슈 #6: 계좌비교 탭 차트 연속 애니메이션 → 메모리 과소비
+
+### 증상
+- 계좌비교 탭의 "계좌별 평가금액 vs 매수금액" 바 차트가 고정되지 않고 계속 움직임
+- 탭 열어둘수록 브라우저 메모리 사용량이 점진적으로 증가
+
+### 원인 분석
+Chart.js는 기본적으로 `animation` 활성화 상태.  
+`responsive: true` 옵션이 ResizeObserver를 등록해 캔버스 크기 변화를 감지하는데,
+애니메이션 → 레이아웃 미세 변화 → ResizeObserver 트리거 → 재렌더 → 애니메이션 반복의
+**무한 루프**가 발생해 CPU/메모리 점유가 지속적으로 증가.
+
+추가 위험: `Chart.getChart()` 없이 변수 참조만으로 destroy 시 canvas에 Chart 인스턴스가
+잔류하는 경우 메모리 누수 발생 가능.
+
+### 수정 내용
+
+**파일:** `stock-dashboard.html`
+
+**수정 1: Chart.js 전역 애니메이션 비활성화 (모든 차트 일괄 적용)**
+```javascript
+// BASELINE_DATE/TIME 상수 선언 직후 추가
+Chart.defaults.animation = false;
+```
+
+**수정 2: 계좌비교 두 차트에 `animation: false` + `Chart.getChart()` 안전 정리**
+```javascript
+// accountCompareChart
+const ex1 = Chart.getChart(canvas1); if (ex1) ex1.destroy();
+if (_accCompareChart) { _accCompareChart.destroy(); _accCompareChart = null; }
+_accCompareChart = new Chart(canvas1, {
+  ...
+  options: { animation: false, responsive: true, ... }
+});
+
+// accountReturnChart
+const ex2 = Chart.getChart(canvas2); if (ex2) ex2.destroy();
+if (_accReturnChart) { _accReturnChart.destroy(); _accReturnChart = null; }
+_accReturnChart = new Chart(canvas2, {
+  ...
+  options: { animation: false, indexAxis: 'y', ... }
+});
+```
+
+### 결과
+- 차트 최초 렌더 후 고정 표시 (움직임 없음)
+- ResizeObserver 루프 차단 → CPU/메모리 안정화
+- 전역 설정(`Chart.defaults.animation = false`)으로 기존 탭 모든 차트에도 동일 효과 적용
+
+### 커밋
+`(이번 수정 커밋 후 추가 예정)`

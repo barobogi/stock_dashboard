@@ -586,6 +586,9 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
     const BASELINE_DATE = (window.KAKAO_PARSED_DATA && window.KAKAO_PARSED_DATA.tradeDateCut) ? window.KAKAO_PARSED_DATA.tradeDateCut : '2026-06-19';
     const BASELINE_TIME = (window.KAKAO_PARSED_DATA && window.KAKAO_PARSED_DATA.tradeTimeCut) ? window.KAKAO_PARSED_DATA.tradeTimeCut : '12:50';
 
+    // 모든 Chart.js 차트 애니메이션 전역 비활성화 (메모리 누수 방지)
+    Chart.defaults.animation = false;
+
     let stocks = [];
     let dividends = [];
     let deposits = [];
@@ -1468,6 +1471,7 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
       const invData  = accData.map(a => Math.round(a.inv  / 10000));
       const canvas1 = document.getElementById('accountCompareChart');
       if (canvas1) {
+        const ex1 = Chart.getChart(canvas1); if (ex1) ex1.destroy();
         if (_accCompareChart) { _accCompareChart.destroy(); _accCompareChart = null; }
         _accCompareChart = new Chart(canvas1, {
           type: 'bar',
@@ -1479,6 +1483,7 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
             ]
           },
           options: {
+            animation: false,
             responsive: true, maintainAspectRatio: false,
             plugins: { legend: { labels: { font: { size: 11 } } } },
             scales: {
@@ -1492,6 +1497,7 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
       // 수익률 가로 바 차트
       const canvas2 = document.getElementById('accountReturnChart');
       if (canvas2) {
+        const ex2 = Chart.getChart(canvas2); if (ex2) ex2.destroy();
         if (_accReturnChart) { _accReturnChart.destroy(); _accReturnChart = null; }
         _accReturnChart = new Chart(canvas2, {
           type: 'bar',
@@ -1505,6 +1511,7 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
             }]
           },
           options: {
+            animation: false,
             indexAxis: 'y',
             responsive: true, maintainAspectRatio: false,
             plugins: { legend: { display: false } },
