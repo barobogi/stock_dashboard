@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# kakao_watcher.py — 카카오톡 파일 자동 감지 → 파싱 → GitHub push → Netlify 배포
+# kakao_watcher.py — 카카오톡 파일 자동 감지 → 파싱 → GitHub push → GitHub Pages 배포
 
 import os, re, json, time, sys, subprocess, requests, threading
 from datetime import datetime
@@ -564,7 +564,7 @@ def refresh_prices_only():
                         f"auto: 현재가 갱신 {data['pushedAt'][:16]} 현재가:{n}개"], check=True)
         subprocess.run(['git', 'push'], check=True)
         print(f"  ✅ 현재가 갱신 완료 ({n}개)")
-        notify("📈 현재가 갱신", f"{n}개 종목 업데이트 · Netlify 배포 중")
+        notify("📈 현재가 갱신", f"{n}개 종목 업데이트 · GitHub Pages 반영 중")
 
 def _hourly_price_refresh_loop():
     """매 정시에 현재가 갱신 (백그라운드 스레드)"""
@@ -600,8 +600,8 @@ def process_file(filepath):
         t, d = len(data['trades']), len(data['dividends'])
         if pushed:
             notify("📈 대시보드 자동 업데이트 완료",
-                   f"거래 {t}건 · 배당 {d}건 → Netlify 배포 중 (1~2분)")
-            print(f"  ✅ 완료! Netlify 자동 배포 진행 중")
+                   f"거래 {t}건 · 배당 {d}건 → GitHub Pages 반영 중 (2~3분)")
+            print(f"  ✅ 완료! GitHub Pages 배포 진행 중")
         else:
             notify("📈 파싱 완료 (변경 없음)", f"거래 {t}건 · 배당 {d}건")
             print(f"  ✅ 파싱 완료 (데이터 동일, push 생략)")
