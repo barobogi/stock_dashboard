@@ -1,3 +1,7 @@
+[build]
+  publish = "."
+  command = ""
+
 [[headers]]
   for = "/*.html"
   [headers.values]
