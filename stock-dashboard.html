@@ -1803,7 +1803,9 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
       const el = document.getElementById('fireProgressSection');
       if (!el) return;
       const totalEval = stocks.reduce((s, x) => s + (x.evalAmount || 0), 0);
-      const target = parseInt(localStorage.getItem('fire_target') || '0');
+      // 우선순위: localStorage(웹 변경값) > KAKAO_PARSED_DATA.fireTarget(watcher 기본값) > 0
+      const serverDefault = (window.KAKAO_PARSED_DATA && window.KAKAO_PARSED_DATA.fireTarget) || 0;
+      const target = parseInt(localStorage.getItem('fire_target') || serverDefault || '0');
       if (!target) {
         el.innerHTML = `<div class="flex items-center gap-2">
           <input type="number" id="fireTargetInput" placeholder="목표 금액 입력 (원)" class="border border-gray-300 rounded px-2 py-1 text-sm w-56">
@@ -1841,7 +1843,8 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
         localStorage.setItem('fire_target', val);
         renderFireProgress();
       } else {
-        const cur = localStorage.getItem('fire_target') || '';
+        const serverDef = (window.KAKAO_PARSED_DATA && window.KAKAO_PARSED_DATA.fireTarget) || '';
+        const cur = localStorage.getItem('fire_target') || serverDef;
         const t = prompt('FIRE 목표 금액 (원)을 입력하세요\n예: 1000000000 (10억)', cur);
         if (t) { localStorage.setItem('fire_target', parseInt(t.replace(/,/g,''))); renderFireProgress(); }
       }

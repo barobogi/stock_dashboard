@@ -34,6 +34,7 @@ DASHBOARD_HTML = os.path.join(REPO_PATH, "stock-dashboard.html")
 TICKER_MAP_FILE= os.path.join(REPO_PATH, "ticker_map.json")
 KAKAO_KEYWORD  = "KakaoTalk"   # 감지할 파일명 키워드 (대소문자 무시)
 EXCHANGE_RATE  = 1375.0        # USD → KRW 기본 환율 (API 실패 시 폴백, 주기적 업데이트 필요)
+FIRE_TARGET    = 1_000_000_000 # FIRE 목표 금액 (웹 UI에서 변경 시 localStorage 우선)
 
 # ── 포트폴리오 국내 종목 (IRP 제외 — 가격체계 다름) ──────────────
 KR_STOCKS = [
@@ -572,6 +573,7 @@ def refresh_prices_only():
             global EXCHANGE_RATE
             EXCHANGE_RATE = new_rate
         data['exchangeRate'] = EXCHANGE_RATE  # 성공 시 갱신, 실패 시 이전 성공값 유지
+        data.setdefault('fireTarget', FIRE_TARGET)  # 웹 UI 미변경 시 기본값 유지
         log.info("  현재가 조회 중...")
         data['prices']   = fetch_prices()
         data['pushedAt'] = datetime.now().isoformat()
@@ -625,6 +627,7 @@ def process_file(filepath):
                 EXCHANGE_RATE = new_rate
             data = parse_kakao(filepath)
             data['exchangeRate'] = EXCHANGE_RATE  # 성공 시 갱신, 실패 시 이전 성공값 유지
+            data.setdefault('fireTarget', FIRE_TARGET)  # 웹 UI 미변경 시 기본값 유지
             log.info("  현재가 조회 중...")
             data['prices'] = fetch_prices()
             inject_to_html(data)
