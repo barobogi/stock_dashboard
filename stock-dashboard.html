@@ -2027,6 +2027,107 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
       document.getElementById('stockDivSummaryBody').innerHTML = summaryRows || '<tr><td colspan="5" class="text-center text-gray-400 py-4">데이터 없음</td></tr>';
     }
 
+    // ═══════════════════════════════════════════════════
+    // 절세 분석 렌더링
+    // ═══════════════════════════════════════════════════
+    function renderTaxOptimization() {
+      const divs = dividends || [];
+      const TAX_RATE_GENERAL = 0.154;   // 일반계좌 배당소득세
+      const THRESHOLD = 20000000;        // 금융소득 종합과세 기준
+      const curYear = new Date().getFullYear();
+
+      // 계좌 유형별 배당 집계
+      const byAccount = {};
+      ACCOUNTS.forEach(a => { byAccount[a.id] = 0; });
+      divs.forEach(d => {
+        if ((d.date || '').startsWith(curYear)) byAccount[d.accountId] = (byAccount[d.accountId] || 0) + d.amount;
+      });
+
+      // 유형별 합계
+      let generalDiv = 0, isaDiv = 0, pensionDiv = 0, irpDiv = 0;
+      ACCOUNTS.forEach(a => {
+        const amt = byAccount[a.id] || 0;
+        if (a.type === 'general') generalDiv += amt;
+        else if (a.type === 'isa')     isaDiv    += amt;
+        else if (a.type === 'pension') pensionDiv += amt;
+        else if (a.type === 'irp')     irpDiv    += amt;
+      });
+
+      // 일반계좌: 세후 금액 기준으로 세전 추정 (세후 = 세전 × (1 - 0.154))
+      const generalGross = generalDiv / (1 - TAX_RATE_GENERAL);
+      const generalTax   = generalGross - generalDiv;
+      const sheltered    = isaDiv + pensionDiv + irpDiv;
+
+      // 요약 카드
+      const fmt = v => Math.abs(v) >= 10000
+        ? (v >= 0 ? '' : '-') + Math.round(Math.abs(v) / 10000) + '만원'
+        : Math.round(v).toLocaleString() + '원';
+
+      document.getElementById('taxPaidEst').textContent        = fmt(generalTax);
+      document.getElementById('taxSavedEst').textContent       = fmt(sheltered);
+      document.getElementById('taxFinancialIncome').textContent = fmt(generalGross);
+
+      const headroom = THRESHOLD - generalGross;
+      const hrEl = document.getElementById('taxHeadroom');
+      hrEl.textContent = headroom > 0 ? fmt(headroom) + ' 남음' : '초과 ' + fmt(-headroom);
+      hrEl.className = 'text-lg font-bold ' + (headroom > 0 ? 'text-yellow-600' : 'text-red-600');
+
+      // 프로그레스 바
+      const pct = Math.min(100, Math.round(generalGross / THRESHOLD * 100));
+      document.getElementById('taxProgressPct').textContent = pct + '%';
+      const bar = document.getElementById('taxProgressBar');
+      bar.style.width = pct + '%';
+      bar.className = 'h-3 rounded-full transition-all duration-500 ' +
+        (pct < 50 ? 'bg-green-400' : pct < 80 ? 'bg-yellow-400' : 'bg-red-500');
+
+      // 계좌별 테이블
+      const tbody = document.getElementById('taxAccountTable');
+      const taxInfo = {
+        general: { label: '과세', badge: 'bg-red-100 text-red-700',   treatment: '배당세 15.4% 원천징수', benefit: '-' },
+        isa:     { label: 'ISA', badge: 'bg-green-100 text-green-700', treatment: '비과세 (200만원 한도)', benefit: '✅ 비과세' },
+        pension: { label: '연금', badge: 'bg-blue-100 text-blue-700',  treatment: '과세 이연 (수령 시 3.3~5.5%)', benefit: '✅ 이연' },
+        irp:     { label: 'IRP', badge: 'bg-purple-100 text-purple-700', treatment: '과세 이연 (수령 시 3.3~5.5%)', benefit: '✅ 이연' },
+      };
+      let totalDiv = 0, totalTax = 0;
+      tbody.innerHTML = ACCOUNTS.map(a => {
+        const amt  = byAccount[a.id] || 0;
+        const info = taxInfo[a.type];
+        const tax  = a.type === 'general' ? amt / (1 - TAX_RATE_GENERAL) * TAX_RATE_GENERAL : 0;
+        totalDiv += amt; totalTax += tax;
+        return `<tr class="hover:bg-gray-50">
+          <td class="p-2 border border-[#E5E7EB]">${a.name}</td>
+          <td class="p-2 border border-[#E5E7EB]"><span class="px-1.5 py-0.5 rounded text-xs font-medium ${info.badge}">${info.label}</span></td>
+          <td class="text-right p-2 border border-[#E5E7EB]">${amt.toLocaleString()}원</td>
+          <td class="text-right p-2 border border-[#E5E7EB] ${tax > 0 ? 'text-red-600' : 'text-gray-400'}">${tax > 0 ? Math.round(tax).toLocaleString() + '원' : '-'}</td>
+          <td class="p-2 border border-[#E5E7EB] text-gray-600">${info.treatment}</td>
+          <td class="p-2 border border-[#E5E7EB]">${info.benefit}</td>
+        </tr>`;
+      }).join('');
+      document.getElementById('taxTotalDiv').textContent = totalDiv.toLocaleString() + '원';
+      document.getElementById('taxTotalTax').textContent = Math.round(totalTax).toLocaleString() + '원';
+
+      // ISA 연간 배당
+      document.getElementById('isaAnnualDiv').textContent = fmt(isaDiv);
+
+      // 절세 추천
+      const advice = [];
+      if (generalTax > 50000)
+        advice.push({ icon: '⚠️', color: 'yellow', msg: `일반계좌 배당세 <b>${fmt(generalTax)}</b> 납부 추정. ISA·연금저축 계좌 비중 확대 시 절세 가능합니다.` });
+      if (headroom < 5000000 && headroom > 0)
+        advice.push({ icon: '🔴', color: 'red', msg: `금융소득 종합과세 기준까지 <b>${fmt(headroom)}</b> 남았습니다. 일반계좌 신규 투자 시 주의하세요.` });
+      if (headroom <= 0)
+        advice.push({ icon: '🚨', color: 'red', msg: `금융소득 <b>${fmt(generalGross)}</b>으로 종합과세 기준(2,000만원) 초과. 세무사 상담을 권장합니다.` });
+      if (isaDiv < 2000000)
+        advice.push({ icon: '💡', color: 'blue', msg: `ISA 비과세 한도 200만원 중 <b>${fmt(200 - isaDiv / 10000)}만원</b> 여유. ISA 계좌 활용을 늘리면 절세됩니다.` });
+      advice.push({ icon: '✅', color: 'green', msg: `연금저축 연 600만원 납입 시 세액공제 <b>최대 99만원</b> 환급. IRP 추가 납입 시 49.5만원 추가 환급 가능합니다.` });
+
+      document.getElementById('taxAdvice').innerHTML = advice.map(a =>
+        `<div class="flex gap-2 p-3 bg-${a.color}-50 border border-${a.color}-100 rounded-lg text-xs text-gray-700">
+           <span class="text-base">${a.icon}</span><span>${a.msg}</span>
+         </div>`
+      ).join('');
+    }
+
     // 당일 거래 렌더링 (2026-06-19 12:50 이후)
     function renderTrades() {
       const tradeList = trades || [];
