@@ -194,3 +194,5 @@ logger = Logger(Path(r"D:\AI\260619_2_Daily_for_stock_TEMP\watcher.log"))
   - URL: https://barobogi.github.io/stock_dashboard/stock-dashboard.html
 - Netlify 중단: 무료 플랜 빌드 크레딧 300분/월 초과 (2026-06-20)
 - 작업 스케줄러: `StockDailyReport` (매일 19:00, daily_report.py)
+
+<!-- auto-deploy test 13:03:44 -->
