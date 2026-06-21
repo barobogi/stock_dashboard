@@ -602,16 +602,44 @@ def refresh_prices_only():
         else:
             log.error("  push 3회 실패 — 다음 정시 갱신 시 재시도")
 
+def _next_refresh_seconds():
+    """현재 시각 기준 다음 갱신까지 대기 시간 계산
+    평일 주간 (08:00~15:59) : 1시간 간격 (매 정시)
+    평일 야간 (16:00~07:59) : 2시간 간격 (짝수 정시)
+    토·일                   : 6시간 간격 (0/6/12/18시)
+    """
+    from datetime import timedelta
+    now     = datetime.now()
+    weekday = now.weekday()          # 0=월 … 4=금, 5=토, 6=일
+    h, m, s = now.hour, now.minute, now.second
+
+    if weekday >= 5:                 # 주말
+        interval = 6
+    elif 8 <= h < 16:                # 평일 주간
+        interval = 1
+    else:                            # 평일 야간
+        interval = 2
+
+    next_h = ((h // interval) + 1) * interval
+    if next_h >= 24:
+        base = datetime(now.year, now.month, now.day) + timedelta(days=1)
+        next_dt = base.replace(hour=next_h % 24, minute=0, second=0, microsecond=0)
+    else:
+        next_dt = now.replace(hour=next_h, minute=0, second=0, microsecond=0)
+
+    secs = max(60, (next_dt - now).total_seconds())
+    return secs, next_dt.strftime('%H:%M'), interval
+
 def _hourly_price_refresh_loop():
-    """매 정시에 현재가 갱신 (백그라운드 스레드)"""
+    """스마트 스케줄 현재가 갱신 (평일 주간 1h / 야간 2h / 주말 6h)"""
     while True:
-        now = datetime.now()
-        secs = 3600 - (now.minute * 60 + now.second)
+        secs, next_time, interval = _next_refresh_seconds()
+        log.info(f"  ⏰ 다음 갱신: {next_time} ({interval}시간 간격, {int(secs//60)}분 후)")
         time.sleep(secs)
         try:
             refresh_prices_only()
         except Exception as e:
-            log.error(f"  ❌ 정시 갱신 오류: {e}")
+            log.error(f"  ❌ 갱신 오류: {e}")
 
 # ═══════════════════════════════════════════════════════════
 #  파일 처리 파이프라인
