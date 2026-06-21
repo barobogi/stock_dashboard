@@ -30,6 +30,10 @@ input[type="text"], input[type="number"], select { border: 1px solid #D1D5DB; bo
 input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; border-color: transparent; }
 .profit { color: #EF4444; font-weight: 600; }
 .loss { color: #2563EB; font-weight: 600; }
+.tab-scroll { overflow-x: auto; white-space: nowrap; scrollbar-width: thin; scrollbar-color: #E5E7EB transparent; }
+.tab-scroll::-webkit-scrollbar { height: 3px; }
+.tab-scroll::-webkit-scrollbar-thumb { background: #D1D5DB; border-radius: 2px; }
+.tab-scroll button { white-space: nowrap; }
 </style>
 
   <!-- KAKAO_AUTO:START -->
@@ -55,17 +59,19 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
   <main class="max-w-7xl w-full mx-auto px-6 py-6 flex-grow">
     <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
       <div>
-        <h1 class="text-xl font-bold">주식 포트폴리오 대시보드 <span class="text-sm font-normal text-gray-400">v1.0</span></h1>
+        <h1 class="text-xl font-bold">주식 포트폴리오 대시보드 <span class="text-sm font-normal text-gray-400">v1.1</span></h1>
         <p id="statusText" class="text-sm text-gray-500 mt-1">2026.06.18 기준</p>
+        <p id="nextRefreshText" class="text-xs text-gray-400 mt-0.5">다음 갱신: 계산 중...</p>
       </div>
       <div class="flex gap-2 flex-wrap">
+        <button onclick="location.reload()" class="btn-outline text-xs">🔄 새로고침</button>
         <button onclick="exportCSV()" class="btn-success text-xs">📊 CSV 내보내기</button>
         <button onclick="exportData()" class="btn-outline text-xs">📤 JSON 내보내기</button>
         <button onclick="resetData()" class="btn-danger text-xs">🗑 초기화</button>
       </div>
     </div>
 
-    <div class="bg-white border border-[#E5E7EB] rounded-t-lg flex flex-wrap">
+    <div class="bg-white border border-[#E5E7EB] rounded-t-lg flex tab-scroll">
       <button onclick="switchTab('dashboard')" class="tab-button px-5 py-3 text-sm font-medium tab-active" data-tab="dashboard">📊 대시보드</button>
       <button onclick="switchTab('portfolio')" class="tab-button px-5 py-3 text-sm font-medium tab-inactive" data-tab="portfolio">📁 포트폴리오</button>
       <button onclick="switchTab('returns')" class="tab-button px-5 py-3 text-sm font-medium tab-inactive" data-tab="returns">📈 수익률</button>
@@ -426,7 +432,11 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
             <div class="text-xs font-semibold text-green-700 mb-2">🟢 ISA 비과세 한도</div>
             <div class="flex justify-between text-xs mb-1"><span>연간 납입 한도</span><span class="font-medium">2,000만원</span></div>
             <div class="flex justify-between text-xs mb-1"><span>비과세 한도</span><span class="font-medium">200만원</span></div>
-            <div class="flex justify-between text-xs mb-2"><span>ISA 연간 배당</span><span id="isaAnnualDiv" class="font-medium text-green-600">-</span></div>
+            <div class="flex justify-between text-xs mb-1"><span>ISA 연간 배당</span><span id="isaAnnualDiv" class="font-medium text-green-600">-</span></div>
+            <div class="flex justify-between text-xs mb-1"><span>비과세 잔여</span><span id="isaRemainingLimit" class="font-medium text-blue-600">-</span></div>
+            <div class="w-full bg-gray-100 rounded-full mb-1" style="height:5px">
+              <div id="isaLimitBar" class="bg-green-500 rounded-full" style="height:5px;width:0%;transition:width 0.4s"></div>
+            </div>
             <div class="text-xs text-gray-400">한도 내 배당은 완전 비과세</div>
           </div>
           <div class="border border-[#E5E7EB] rounded-lg p-3">
@@ -747,8 +757,29 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
 
     let accountPieChart = null, stockPieChart = null, pnlChart = null, divChart = null, stockDivChart = null, accDivChart = null;
     let activeDividends = [];
-    const APP_VERSION = 'v1.0';
+    const APP_VERSION = 'v1.1';
     const STORAGE_KEY = 'stock_dashboard_v3';
+
+    // 다음 자동갱신 시각 계산 (kakao_watcher.py 스케줄과 동일 로직)
+    function _calcNextRefresh() {
+      const now = new Date();
+      const h = now.getHours(), wd = now.getDay();
+      let interval;
+      if (wd === 0 || wd === 6) interval = 6;        // 주말
+      else if (h >= 8 && h < 16) interval = 1;       // 평일 주간
+      else interval = 2;                              // 평일 야간
+      const nextH = (Math.floor(h / interval) + 1) * interval;
+      const next = new Date(now);
+      if (nextH >= 24) { next.setDate(next.getDate() + 1); next.setHours(nextH % 24, 0, 0, 0); }
+      else next.setHours(nextH, 0, 0, 0);
+      const diffMin = Math.round((next - now) / 60000);
+      const label = wd === 0 || wd === 6 ? '주말' : h >= 8 && h < 16 ? '주간' : '야간';
+      return `${String(next.getHours()).padStart(2,'0')}:00 (${diffMin}분 후 · ${label} ${interval}h 간격)`;
+    }
+    function _updateNextRefresh() {
+      const el = document.getElementById('nextRefreshText');
+      if (el) el.textContent = '다음 갱신: ' + _calcNextRefresh();
+    }
 
     document.addEventListener('DOMContentLoaded', function() {
       // ?reset=1 파라미터로 localStorage 초기화
@@ -796,6 +827,8 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
           const d = kdPushedAt.slice(0,10).replace(/-/g,'.');
           const t = kdPushedAt.slice(11,16);
           document.getElementById('statusText').textContent = `${d} ${t} 기준 (자동업데이트)`;
+          _updateNextRefresh();
+          setInterval(_updateNextRefresh, 60000); // 1분마다 갱신
         }
       } else {
         const raw = localStorage.getItem(STORAGE_KEY);
@@ -2150,8 +2183,17 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
       document.getElementById('taxTotalDiv').textContent = totalDiv.toLocaleString() + '원';
       document.getElementById('taxTotalTax').textContent = Math.round(totalTax).toLocaleString() + '원';
 
-      // ISA 연간 배당
+      // ISA 연간 배당 + 비과세 잔여 + 프로그레스 바
       document.getElementById('isaAnnualDiv').textContent = fmt(isaDiv);
+      const ISA_FREE_LIMIT = 2_000_000;
+      const isaRemaining = Math.max(0, ISA_FREE_LIMIT - isaDiv);
+      const isaUsePct    = Math.min(100, Math.round((isaDiv / ISA_FREE_LIMIT) * 100));
+      const remEl = document.getElementById('isaRemainingLimit');
+      remEl.textContent = isaRemaining > 0 ? `${Math.round(isaRemaining/10000)}만원 여유` : '한도 초과';
+      remEl.className   = `font-medium ${isaUsePct >= 100 ? 'text-red-600' : isaUsePct >= 80 ? 'text-yellow-600' : 'text-blue-600'}`;
+      const barEl = document.getElementById('isaLimitBar');
+      barEl.style.width = `${isaUsePct}%`;
+      barEl.className   = `rounded-full ${isaUsePct >= 100 ? 'bg-red-500' : isaUsePct >= 80 ? 'bg-yellow-400' : 'bg-green-500'}`;
 
       // 절세 추천
       const advice = [];
@@ -2257,8 +2299,8 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
         const isSun    = new Date(y, m, d).getDay() === 0;
         const isSat    = new Date(y, m, d).getDay() === 6;
 
-        const dayColor  = isSun ? 'text-red-500' : isSat ? 'text-blue-500' : 'text-gray-700';
-        const bgClass   = isToday ? 'bg-blue-600 text-white rounded-full' : '';
+        const dayColor  = isToday ? '' : isSun ? 'text-red-500' : isSat ? 'text-blue-500' : 'text-gray-700';
+        const bgClass   = isToday ? 'bg-blue-600 text-white rounded-full ring-2 ring-blue-300' : '';
         const hasDivBg  = total > 0 ? 'bg-green-50 border border-green-200' : 'border border-transparent';
         const fmt       = v => v >= 10000 ? Math.round(v/10000)+'만' : v.toLocaleString();
 
