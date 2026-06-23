@@ -235,12 +235,16 @@ def fetch_prices():
 ACCOUNTS_DEFAULT = [
     {"id": 1, "num": "70714", "type": "general", "name": "일반계좌1"},
     {"id": 2, "num": "70871", "type": "general", "name": "일반계좌2"},
-    {"id": 3, "num": "71297", "type": "isa",     "name": "ISA"},
-    {"id": 4, "num": "70714", "type": "irp",     "name": "IRP"},   # 70714이지만 IRP/퇴직연금 키워드로 구분
-    {"id": 5, "num": "71462", "type": "pension", "name": "연금저축1"},
-    {"id": 6, "num": "71615", "type": "pension", "name": "연금저축2"},
-    {"id": 7, "num": "70868", "type": "pension", "name": "연금저축3"},
+    {"id": 3, "num": "71417", "type": "general", "name": "일반계좌3"},  # 해외주식 계좌
+    {"id": 4, "num": "71661", "type": "general", "name": "일반계좌4"},
+    {"id": 5, "num": "71297", "type": "isa",     "name": "ISA"},
+    {"id": 6, "num": "70714", "type": "irp",     "name": "IRP"},   # 70714이지만 IRP/퇴직연금 키워드로 구분
+    {"id": 7, "num": "71462", "type": "pension", "name": "연금저축1"},
+    {"id": 8, "num": "71615", "type": "pension", "name": "연금저축2"},
+    {"id": 9, "num": "70868", "type": "pension", "name": "연금저축3"},
 ]
+# 카카오톡 단체방에 섞이는 타인 계좌 — 자동 등록 영구 제외
+EXCLUDED_NUMS = {"71374"}
 ACCOUNTS_FILE = Path(__file__).parent / 'accounts.json'
 
 def _load_accounts():
@@ -272,11 +276,13 @@ def find_account(num, ctx_lines):
     if num == "70714":
         for l in ctx_lines:
             if "IRP" in l or "퇴직연금" in l:
-                return next((a for a in ACCOUNTS if a["id"] == 4), None)
-        return next((a for a in ACCOUNTS if a["id"] == 1), None)
+                return next((a for a in ACCOUNTS if a["num"] == "70714" and a["type"] == "irp"), None)
+        return next((a for a in ACCOUNTS if a["num"] == "70714" and a["type"] == "general"), None)
     found = next((a for a in ACCOUNTS if a["num"] == num and a["type"] != "irp"), None)
     if found:
         return found
+    if num in EXCLUDED_NUMS:
+        return None  # 타인 계좌 — 조용히 무시
     # 미등록 계좌 → 일반계좌로 자동 등록
     new_id = max((a['id'] for a in ACCOUNTS), default=0) + 1
     new_acc = {"id": new_id, "num": num, "type": "general", "name": _next_account_name(ACCOUNTS, 'general')}
