@@ -232,24 +232,58 @@ def fetch_prices():
 # ═══════════════════════════════════════════════════════════
 #  계좌 정의
 # ═══════════════════════════════════════════════════════════
-ACCOUNTS = [
-    {"id": 1, "num": "70714", "type": "general"},
-    {"id": 2, "num": "70871", "type": "general"},
-    {"id": 3, "num": "71297", "type": "isa"},
-    {"id": 4, "num": "70714", "type": "irp"},    # 70714이지만 IRP/퇴직연금 키워드로 구분
-    {"id": 5, "num": "71462", "type": "pension"},
-    {"id": 6, "num": "71615", "type": "pension"},
-    {"id": 7, "num": "70868", "type": "pension"},
+ACCOUNTS_DEFAULT = [
+    {"id": 1, "num": "70714", "type": "general", "name": "일반계좌1"},
+    {"id": 2, "num": "70871", "type": "general", "name": "일반계좌2"},
+    {"id": 3, "num": "71297", "type": "isa",     "name": "ISA"},
+    {"id": 4, "num": "70714", "type": "irp",     "name": "IRP"},   # 70714이지만 IRP/퇴직연금 키워드로 구분
+    {"id": 5, "num": "71462", "type": "pension", "name": "연금저축1"},
+    {"id": 6, "num": "71615", "type": "pension", "name": "연금저축2"},
+    {"id": 7, "num": "70868", "type": "pension", "name": "연금저축3"},
 ]
+ACCOUNTS_FILE = Path(__file__).parent / 'accounts.json'
+
+def _load_accounts():
+    base = {(a['num'], a['type']): a for a in ACCOUNTS_DEFAULT}
+    if ACCOUNTS_FILE.exists():
+        try:
+            for a in json.loads(ACCOUNTS_FILE.read_text(encoding='utf-8')):
+                key = (a['num'], a['type'])
+                if key not in base:
+                    base[key] = a
+        except Exception as e:
+            log.warning(f"accounts.json 로드 실패: {e}")
+    return list(base.values())
+
+def _save_accounts(accounts):
+    default_keys = {(a['num'], a['type']) for a in ACCOUNTS_DEFAULT}
+    extra = [a for a in accounts if (a['num'], a['type']) not in default_keys]
+    ACCOUNTS_FILE.write_text(json.dumps(extra, ensure_ascii=False, indent=2), encoding='utf-8')
+
+def _next_account_name(accounts, type_):
+    n = len([a for a in accounts if a['type'] == type_]) + 1
+    return {'general': f'일반계좌{n}', 'isa': f'ISA{n}', 'irp': f'IRP{n}', 'pension': f'연금저축{n}'}.get(type_, f'{type_}{n}')
+
+ACCOUNTS = _load_accounts()
 
 def find_account(num, ctx_lines):
-    """계좌번호 앞5자리 + 주변 라인으로 계좌 특정"""
+    """계좌번호 앞5자리 + 주변 라인으로 계좌 특정. 미등록 계좌는 일반계좌로 자동 등록."""
+    global ACCOUNTS
     if num == "70714":
         for l in ctx_lines:
             if "IRP" in l or "퇴직연금" in l:
                 return next((a for a in ACCOUNTS if a["id"] == 4), None)
         return next((a for a in ACCOUNTS if a["id"] == 1), None)
-    return next((a for a in ACCOUNTS if a["num"] == num and a["type"] != "irp"), None)
+    found = next((a for a in ACCOUNTS if a["num"] == num and a["type"] != "irp"), None)
+    if found:
+        return found
+    # 미등록 계좌 → 일반계좌로 자동 등록
+    new_id = max((a['id'] for a in ACCOUNTS), default=0) + 1
+    new_acc = {"id": new_id, "num": num, "type": "general", "name": _next_account_name(ACCOUNTS, 'general')}
+    ACCOUNTS.append(new_acc)
+    _save_accounts(ACCOUNTS)
+    log.warning(f"⚠️ 미등록 계좌 자동 등록: {num} → {new_acc['name']} (id:{new_id})")
+    return new_acc
 
 # ═══════════════════════════════════════════════════════════
 #  파싱 유틸
@@ -516,7 +550,8 @@ def parse_kakao(filepath):
         'tradeDateCut': TRADE_DATE_CUT,
         'tradeTimeCut': TRADE_TIME_CUT,
         'pushedAt': datetime.now().isoformat(),
-        'sourceFile': Path(filepath).name
+        'sourceFile': Path(filepath).name,
+        'accounts': ACCOUNTS,
     }
 
 # ═══════════════════════════════════════════════════════════
