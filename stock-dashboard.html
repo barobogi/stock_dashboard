@@ -933,6 +933,7 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
       updateAll();
       checkAutoSnapshot();
       loadManualStocksFromFirebase();
+      _applyFirebaseAccountOverrides();
     });
 
     function showToast(msg, type = 'info') {
@@ -1605,9 +1606,11 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
         const divLine = accDiv > 0
           ? `<p class="text-xs text-green-600 mt-0.5">배당 ₩${accDiv.toLocaleString()}${accTax > 0 ? ` · 세금 ₩${accTax.toLocaleString()}` : ' · 세금 없음'}</p>`
           : '';
-        return `<div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-[#E5E7EB]">
+        const isNew = acc.desc === '자동 등록';
+        const changeBtn = `<button onclick="openAccountTypeModal(${acc.id})" class="text-xs text-blue-500 underline ml-1">${isNew ? '⚠️ 유형 변경' : '유형 변경'}</button>`;
+        return `<div class="flex items-center justify-between p-3 ${isNew?'bg-yellow-50 border-yellow-200':'bg-gray-50 border-[#E5E7EB]'} rounded-lg border">
           <div>
-            <p class="text-sm font-medium">${acc.name} <span class="text-xs text-gray-400 font-normal">(${acc.acctNum})</span></p>
+            <p class="text-sm font-medium">${acc.name} <span class="text-xs text-gray-400 font-normal">(${acc.acctNum||acc.num+'*****'})</span>${changeBtn}</p>
             <p class="text-xs text-gray-400">${s.length}개 종목 · <span class="text-purple-500">${taxLabels[acc.type]||''}</span></p>
             ${divLine}
           </div>
