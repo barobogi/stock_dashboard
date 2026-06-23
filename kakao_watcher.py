@@ -645,6 +645,7 @@ def refresh_prices_only():
             EXCHANGE_RATE = new_rate
         data['exchangeRate'] = EXCHANGE_RATE  # 성공 시 갱신, 실패 시 이전 성공값 유지
         data.setdefault('fireTarget', FIRE_TARGET)  # 웹 UI 미변경 시 기본값 유지
+        data['accounts'] = ACCOUNTS  # 신규 계좌 자동 등록 반영
         log.info("  현재가 조회 중...")
         data['prices']   = fetch_prices()
         data['pushedAt'] = datetime.now().isoformat()
