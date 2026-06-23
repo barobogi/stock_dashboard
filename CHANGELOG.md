@@ -4,6 +4,34 @@
 
 ---
 
+## v1.2 — 2026-06-23
+
+### 추가
+- **종목 Study 탭 신설**: 평가금액 큰 순 종목 리스트 + 2가지 조회 모드
+  - 🔍 A모드 (기본): Google News RSS + CORS 프록시 — 오늘 뉴스 최대 5개, 없으면 "특이사항 없음"
+  - 🤖 B모드: Firebase → 데몬 → Claude AI 투자 분석 (당일 캐시, 토큰 1회 소비)
+- **Firebase 수동 종목 동기화**: 추가/수정/삭제 시 `stock_dashboard/manual_stocks` 실시간 동기화 → 다기기 동일 데이터
+- **계좌 간 종목 이동**: 포트폴리오 탭 종목 행 "이동" 버튼 → 드롭다운으로 대상 계좌 선택 즉시 이동
+- **계좌 유형 변경 UI**: 계좌비교 탭 "유형 변경" 버튼 → general/ISA/IRP/연금저축 변경 + 자동 이름 부여 + Firebase 저장
+- **신규 계좌 자동 등록**: kakao_watcher가 미등록 계좌번호 감지 시 `일반계좌N`으로 자동 등록 후 `accounts.json` 저장
+- **계좌 2개 추가**: 일반계좌3 (71417 해외주식), 일반계좌4 (71661)
+- **가족 계좌 영구 제외**: EXCLUDED_NUMS = {71374} — 카카오톡 단체방 타인 계좌 자동 등록 차단
+- **토스트 알림**: Firebase 저장 성공/실패 실시간 알림 (☁️ 성공 / ⚠️ 실패 + 원인 안내)
+- `desktop_daemon.py`: `study_requests` Firebase 리스너 추가 — B모드 AI 분석 처리
+
+### 변경
+- `kakao_watcher.py`: 환율 API 폴백 4단계로 강화
+  - Dunamu(폐기) → Naver(409) → **Yahoo Finance(~1,537원)** → **ExchangeRate-API(~1,537원)**
+- `kakao_watcher.py`: `KAKAO_PARSED_DATA`에 `accounts` 포함 — 신규 계좌 대시보드 자동 반영
+
+### 수정 (디버그)
+- **계좌 ID 매핑 깨짐**: 신규 계좌(71417, 71661)를 id 3, 4에 삽입 → 기존 ISA(id3)/IRP(id4) 데이터 전부 잘못 표시
+  - 원인: stocks/trades/dividends가 accountId(숫자) 참조 — id 순서 변경 시 전체 매핑 오류
+  - 수정: 신규 계좌를 id 8, 9로 재배치. **id 1~7 영구 고정 규칙 수립**
+- **환율 1,375원 고정**: Dunamu API DNS 실패 + Naver API 409 — Yahoo Finance 폴백으로 실제 환율 반영
+
+---
+
 ## v1.1 — 2026-06-21
 
 ### 추가
