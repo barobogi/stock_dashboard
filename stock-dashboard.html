@@ -863,11 +863,33 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
       setupDropZones();
       updateAll();
       checkAutoSnapshot();
+      loadManualStocksFromFirebase();
     });
 
     function saveToStorage() {
       const pushedAt = window.KAKAO_PARSED_DATA ? (window.KAKAO_PARSED_DATA.pushedAt || '') : '';
       localStorage.setItem(STORAGE_KEY, JSON.stringify({ stocks, dividends, deposits, trades, snapshots, exchangeRate, pushedAt }));
+      // Firebase에 수동 추가/수정 종목만 동기화
+      const manualStocks = stocks.filter(s => s.id && s.id.startsWith('manual_'));
+      const fbData = {};
+      manualStocks.forEach(s => { fbData[s.id.replace(/\./g,'_')] = s; });
+      _fbDb.ref(FB_PATH).set(Object.keys(fbData).length > 0 ? fbData : null).catch(e => console.warn('Firebase 저장 실패:', e));
+    }
+
+    async function loadManualStocksFromFirebase() {
+      try {
+        const snap = await _fbDb.ref(FB_PATH).get();
+        if (!snap.exists()) return;
+        const fbStocks = Object.values(snap.val());
+        // 기존 stocks에서 manual_ 제거 후 Firebase 것으로 교체
+        stocks = stocks.filter(s => !s.id || !s.id.startsWith('manual_'));
+        stocks = stocks.concat(fbStocks);
+        saveToStorage();
+        updateAll();
+        console.log(`Firebase에서 수동 종목 ${fbStocks.length}개 로드 완료`);
+      } catch(e) {
+        console.warn('Firebase 로드 실패:', e);
+      }
     }
 
     function loadFromStorage() {
@@ -2424,6 +2446,10 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
       if (!confirm('삭제?')) return;
       stocks = stocks.filter(s => s.id !== stockId);
       saveToStorage();
+      // Firebase에서도 삭제 (manual_ 종목만)
+      if (stockId && stockId.startsWith('manual_')) {
+        _fbDb.ref(FB_PATH + '/' + stockId.replace(/\./g,'_')).remove().catch(e => console.warn('Firebase 삭제 실패:', e));
+      }
       updateAll();
     }
     function saveStock() {
