@@ -119,15 +119,17 @@ def _naver_price(code):
         return 0
 
 def fetch_exchange_rate():
-    """USD/KRW 환율 조회 (Dunamu API → Naver 폴백)"""
+    """USD/KRW 환율 조회 (Dunamu → Naver → Yahoo Finance → ExchangeRate-API 순 폴백)"""
+    # 1. Dunamu
     try:
         r = _sess.get('https://quotation-api-cdn.dunamu.com/v1/forex/recent?codes=FRX.KRWUSD', timeout=5)
         rate = float(r.json()[0].get('basePrice', 0))
         if rate > 1000:
-            log.info(f"  환율 조회: 1 USD = ₩{rate:,.1f}")
+            log.info(f"  환율 조회(Dunamu): 1 USD = ₩{rate:,.1f}")
             return rate
     except Exception:
         pass
+    # 2. Naver
     try:
         r = _sess.get('https://m.stock.naver.com/front-api/v1/index/info?indexCode=FRX.KRWUSD', timeout=5)
         rate = float(str(r.json().get('result', {}).get('closePrice', '0')).replace(',', ''))
@@ -136,7 +138,25 @@ def fetch_exchange_rate():
             return rate
     except Exception:
         pass
-    log.warning(f"  환율 조회 실패 — 기존값 사용: ₩{EXCHANGE_RATE}")
+    # 3. Yahoo Finance
+    try:
+        r = _sess.get('https://query1.finance.yahoo.com/v8/finance/chart/USDKRW=X?interval=1d&range=1d', timeout=5)
+        rate = float(r.json()['chart']['result'][0]['meta']['regularMarketPrice'])
+        if rate > 1000:
+            log.info(f"  환율 조회(Yahoo): 1 USD = ₩{rate:,.1f}")
+            return rate
+    except Exception:
+        pass
+    # 4. ExchangeRate-API (무료, 인증 불필요)
+    try:
+        r = _sess.get('https://open.er-api.com/v6/latest/USD', timeout=5)
+        rate = float(r.json()['rates']['KRW'])
+        if rate > 1000:
+            log.info(f"  환율 조회(ExchangeRate-API): 1 USD = ₩{rate:,.1f}")
+            return rate
+    except Exception:
+        pass
+    log.warning(f"  환율 조회 전체 실패 — 기존값 사용: ₩{EXCHANGE_RATE}")
     return None
 
 def fetch_prices():
