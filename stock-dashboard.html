@@ -2553,6 +2553,220 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
       document.getElementById('stockType').value = s.type;
       document.getElementById('stockModal').classList.remove('hidden');
     }
+    // ═══════════════════════════════════════════════════════════
+    //  📚 종목 Study
+    // ═══════════════════════════════════════════════════════════
+    let _studyMode = 'A';
+    let _studyCache = {};  // stockName -> { items, ts }
+
+    const CORS_PROXIES = [
+      u => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+      u => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,
+      u => `https://thingproxy.freeboard.io/fetch/${u}`,
+    ];
+
+    // 외국 종목명 검색어 매핑 (없으면 한글명 그대로 사용)
+    const STUDY_QUERY_MAP = {
+      '앰프리어스 테크놀로지스': 'Amprius Technologies AMPX',
+      'AST 스페이스모바일': 'AST SpaceMobile ASTS',
+      'TRD2XLG APLD ETF': 'Applied Digital APLD leveraged ETF',
+      'TRADR 2X LNG ETF': 'TRADR LNG ETF natural gas',
+      'TRDR 2X ASTS ETF': 'TRADR AST SpaceMobile leveraged ETF',
+      'YieldMax 매그니피센트 옵션인컴 ETF': 'YieldMax Magnificent Seven YMAG ETF',
+    };
+
+    function setStudyMode(mode) {
+      _studyMode = mode;
+      document.getElementById('btnModeA').className =
+        `px-3 py-1.5 text-xs font-semibold rounded-full ${mode==='A' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600'}`;
+      document.getElementById('btnModeB').className =
+        `px-3 py-1.5 text-xs font-semibold rounded-full ${mode==='B' ? 'bg-purple-500 text-white' : 'bg-gray-100 text-gray-600'}`;
+    }
+
+    function _getStudyStocks() {
+      const map = {};
+      stocks.forEach(s => {
+        if (!map[s.name]) map[s.name] = { name: s.name, evalAmount: 0, type: s.type || '' };
+        map[s.name].evalAmount += s.evalAmount || 0;
+      });
+      return Object.values(map).sort((a, b) => b.evalAmount - a.evalAmount);
+    }
+
+    async function _fetchRSS(url) {
+      for (let i = 0; i < CORS_PROXIES.length; i++) {
+        try {
+          const proxyUrl = CORS_PROXIES[i](url);
+          const ctrl = new AbortController();
+          const tid = setTimeout(() => ctrl.abort(), 6000);
+          const res = await fetch(proxyUrl, { signal: ctrl.signal });
+          clearTimeout(tid);
+          if (!res.ok) continue;
+          // allorigins wraps in JSON
+          const text = i === 1 ? (await res.json()).contents : await res.text();
+          if (text && text.includes('<item>')) return text;
+        } catch(e) { continue; }
+      }
+      return null;
+    }
+
+    async function _fetchNewsForStock(name) {
+      const cacheKey = name + '_' + new Date().toDateString();
+      if (_studyCache[cacheKey]) return _studyCache[cacheKey];
+
+      const query = STUDY_QUERY_MAP[name] || name;
+      const isKorean = /[가-힣]/.test(query);
+      const rssUrl = isKorean
+        ? `https://news.google.com/rss/search?q=${encodeURIComponent(query + ' 주식')}&hl=ko&gl=KR&ceid=KR:ko`
+        : `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=en&gl=US&ceid=US:en`;
+
+      const rssText = await _fetchRSS(rssUrl);
+      if (!rssText) { _studyCache[cacheKey] = []; return []; }
+
+      const xml = new DOMParser().parseFromString(rssText, 'text/xml');
+      const today = new Date().toDateString();
+
+      const items = [...xml.querySelectorAll('item')]
+        .map(el => ({
+          title: el.querySelector('title')?.textContent?.replace(/<[^>]+>/g, '').trim() || '',
+          link:  el.querySelector('link')?.nextSibling?.nodeValue?.trim()
+              || el.querySelector('link')?.textContent?.trim() || '#',
+          pubDate: el.querySelector('pubDate')?.textContent || '',
+          source:  el.querySelector('source')?.textContent || '',
+        }))
+        .filter(it => it.title)
+        .filter(it => !it.pubDate || new Date(it.pubDate).toDateString() === today)
+        .slice(0, 5);
+
+      _studyCache[cacheKey] = items;
+      return items;
+    }
+
+    function _renderStudySkeleton(studyStocks) {
+      document.getElementById('studyList').innerHTML = studyStocks.map((s, i) => `
+        <div class="bg-white rounded-xl border border-gray-100 p-4" id="si_${i}">
+          <div class="flex justify-between items-center mb-2">
+            <span class="text-sm font-semibold truncate max-w-[60%]">${s.name}</span>
+            <span class="text-xs text-gray-400">₩${s.evalAmount.toLocaleString()}</span>
+          </div>
+          <div class="study-body text-xs text-gray-400">조회 중...</div>
+        </div>`).join('');
+    }
+
+    function _renderNewsItems(items) {
+      if (!items || items.length === 0) return '<p class="text-xs text-gray-400 py-1">특이사항 없음</p>';
+      return items.map(it => `
+        <div class="py-1.5 border-b border-gray-50 last:border-0">
+          <a href="${it.link}" target="_blank" rel="noopener"
+            class="text-xs text-gray-700 hover:text-blue-600 leading-snug block">${it.title}</a>
+          <span class="text-xs text-gray-400">${it.source}${it.pubDate ? ' · ' + new Date(it.pubDate).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}) : ''}</span>
+        </div>`).join('');
+    }
+
+    async function updateStudy() {
+      if (_studyMode === 'B') { _updateStudyB(); return; }
+
+      const btn = document.getElementById('studyUpdateBtn');
+      btn.textContent = '조회 중...'; btn.disabled = true;
+
+      const ss = _getStudyStocks();
+      document.getElementById('studyStatus').textContent = `${ss.length}개 종목 뉴스 조회 중...`;
+      _renderStudySkeleton(ss);
+
+      let done = 0;
+      for (let i = 0; i < ss.length; i++) {
+        const items = await _fetchNewsForStock(ss[i].name);
+        const el = document.getElementById(`si_${i}`);
+        if (el) el.querySelector('.study-body').innerHTML = _renderNewsItems(items);
+        done++;
+        document.getElementById('studyStatus').textContent = `${done}/${ss.length}개 조회 중...`;
+      }
+
+      btn.textContent = '업데이트'; btn.disabled = false;
+      document.getElementById('studyStatus').textContent =
+        `🔍 뉴스 기준 · 마지막 업데이트: ${new Date().toLocaleTimeString('ko-KR')}`;
+    }
+
+    async function _updateStudyB() {
+      const ss = _getStudyStocks();
+      const today = new Date().toISOString().split('T')[0];
+      const btn = document.getElementById('studyUpdateBtn');
+
+      // Firebase 캐시 확인
+      try {
+        const cached = await _fbDb.ref(`stock_dashboard/study_results/${today}`).get();
+        if (cached.exists()) {
+          _renderStudyResultsB(cached.val(), ss);
+          showToast('☁️ 오늘 AI 분석 캐시 사용', 'info');
+          document.getElementById('studyStatus').textContent =
+            `🤖 AI 분석 캐시 · ${today}`;
+          return;
+        }
+      } catch(e) {}
+
+      showToast('🤖 AI 분석 요청 중...', 'info');
+      document.getElementById('studyStatus').textContent = 'AI 분석 요청 중 (30~60초 소요)...';
+      btn.disabled = true;
+
+      const reqId = 'study_' + Date.now();
+      await _fbDb.ref(`stock_dashboard/study_requests/${reqId}`).set({
+        reqId, stockNames: ss.map(s => s.name), requestedAt: new Date().toISOString()
+      });
+
+      // 결과 수신 대기
+      const resultRef = _fbDb.ref(`stock_dashboard/study_results/${today}`);
+      let resolved = false;
+      const handler = resultRef.on('value', snap => {
+        if (!snap.exists() || resolved) return;
+        resolved = true;
+        resultRef.off('value', handler);
+        _renderStudyResultsB(snap.val(), ss);
+        btn.disabled = false;
+        document.getElementById('studyStatus').textContent =
+          `🤖 AI 분석 완료 · ${new Date().toLocaleTimeString('ko-KR')}`;
+        showToast('🤖 AI 분석 완료!', 'success');
+      });
+
+      setTimeout(() => {
+        if (resolved) return;
+        resolved = true;
+        resultRef.off('value', handler);
+        btn.disabled = false;
+        document.getElementById('studyStatus').textContent = '⚠️ 응답 없음 — 데몬 실행 중인지 확인';
+        showToast('⚠️ AI 분석 응답 없음', 'error');
+      }, 90000);
+    }
+
+    function _renderStudyResultsB(results, studyStocks) {
+      document.getElementById('studyList').innerHTML = studyStocks.map(s => {
+        const pts = results[s.name] || [];
+        const body = pts.length > 0
+          ? pts.map(p => `<div class="py-1 border-b border-gray-50 last:border-0 text-xs text-gray-700">• ${p}</div>`).join('')
+          : '<p class="text-xs text-gray-400 py-1">특이사항 없음</p>';
+        return `
+          <div class="bg-white rounded-xl border border-purple-100 p-4">
+            <div class="flex justify-between items-center mb-2">
+              <span class="text-sm font-semibold truncate max-w-[60%]">${s.name}</span>
+              <span class="text-xs text-gray-400">₩${s.evalAmount.toLocaleString()}</span>
+            </div>
+            <div>${body}</div>
+          </div>`;
+      }).join('');
+    }
+
+    function renderStudyTab() {
+      if (document.getElementById('studyList').innerHTML !== '') return;
+      const ss = _getStudyStocks();
+      document.getElementById('studyList').innerHTML = ss.map(s => `
+        <div class="bg-white rounded-xl border border-gray-100 p-4">
+          <div class="flex justify-between items-center">
+            <span class="text-sm font-semibold truncate max-w-[60%]">${s.name}</span>
+            <span class="text-xs text-gray-400">₩${s.evalAmount.toLocaleString()}</span>
+          </div>
+          <p class="text-xs text-gray-400 mt-1">업데이트 버튼을 눌러 조회하세요</p>
+        </div>`).join('');
+      document.getElementById('studyStatus').textContent = `총 ${ss.length}개 종목`;
+    }
+
     function moveStock(stockId) {
       const s = stocks.find(x => x.id === stockId);
       if (!s) return;
