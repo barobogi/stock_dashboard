@@ -94,6 +94,7 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
       <button onclick="switchTab('divcal')" class="tab-button px-5 py-3 text-sm font-medium tab-inactive" data-tab="divcal">📅 배당달력</button>
       <button onclick="switchTab('import')" class="tab-button px-5 py-3 text-sm font-medium tab-inactive" data-tab="import">📂 파일 불러오기</button>
       <button onclick="switchTab('settings')" class="tab-button px-5 py-3 text-sm font-medium tab-inactive" data-tab="settings">⚙️ 관리</button>
+      <button onclick="switchTab('study')" class="tab-button px-5 py-3 text-sm font-medium tab-inactive" data-tab="study">📚 종목 Study</button>
     </div>
 
     <!-- TAB: DASHBOARD -->
@@ -543,6 +544,22 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
         <button onclick="autoLoadFile()" class="btn-outline text-xs mt-3">📥 KakaoTalkChats_260619_1400.txt 자동 불러오기</button>
         <div id="importLog" class="mt-4 p-4 bg-gray-50 border border-[#E5E7EB] rounded max-h-32 overflow-y-auto text-xs font-mono whitespace-pre-wrap text-gray-600"></div>
       </div>
+    </div>
+
+    <!-- TAB: STUDY -->
+    <div id="study" class="tab-content bg-white border border-t-0 border-[#E5E7EB] rounded-b-lg p-4 hidden">
+      <div class="flex items-center justify-between mb-3">
+        <div class="flex gap-2">
+          <button id="btnModeA" onclick="setStudyMode('A')"
+            class="px-3 py-1.5 text-xs font-semibold rounded-full bg-blue-500 text-white">🔍 뉴스 (빠른조회)</button>
+          <button id="btnModeB" onclick="setStudyMode('B')"
+            class="px-3 py-1.5 text-xs font-semibold rounded-full bg-gray-100 text-gray-600">🤖 AI 분석</button>
+        </div>
+        <button onclick="updateStudy()" id="studyUpdateBtn"
+          class="px-4 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-full hover:bg-blue-700">업데이트</button>
+      </div>
+      <p id="studyStatus" class="text-xs text-gray-400 mb-3"></p>
+      <div id="studyList" class="space-y-3"></div>
     </div>
 
     <!-- TAB: SETTINGS -->
