@@ -866,14 +866,32 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
       loadManualStocksFromFirebase();
     });
 
+    function showToast(msg, type = 'info') {
+      const colors = { success: '#34C759', error: '#FF3B30', info: '#2D6CDF', warn: '#FF9500' };
+      const el = document.createElement('div');
+      el.textContent = msg;
+      el.style.cssText = `position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
+        background:${colors[type]||colors.info};color:#fff;padding:10px 20px;border-radius:20px;
+        font-size:13px;font-weight:600;z-index:9999;opacity:0;transition:opacity .3s;white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,.2)`;
+      document.body.appendChild(el);
+      requestAnimationFrame(() => { el.style.opacity = '1'; });
+      setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 300); }, 3000);
+    }
+
     function saveToStorage() {
       const pushedAt = window.KAKAO_PARSED_DATA ? (window.KAKAO_PARSED_DATA.pushedAt || '') : '';
       localStorage.setItem(STORAGE_KEY, JSON.stringify({ stocks, dividends, deposits, trades, snapshots, exchangeRate, pushedAt }));
       // Firebase에 수동 추가/수정 종목만 동기화
       const manualStocks = stocks.filter(s => s.id && s.id.startsWith('manual_'));
+      if (manualStocks.length === 0) return;
       const fbData = {};
       manualStocks.forEach(s => { fbData[s.id.replace(/\./g,'_')] = s; });
-      _fbDb.ref(FB_PATH).set(Object.keys(fbData).length > 0 ? fbData : null).catch(e => console.warn('Firebase 저장 실패:', e));
+      _fbDb.ref(FB_PATH).set(fbData)
+        .then(() => showToast('☁️ 서버에 저장됨', 'success'))
+        .catch(e => {
+          console.warn('Firebase 저장 실패:', e);
+          showToast('⚠️ 서버 저장 실패 — 이 기기에만 저장됨 (Firebase 규칙 만료 확인 필요)', 'error');
+        });
     }
 
     async function loadManualStocksFromFirebase() {
@@ -881,14 +899,14 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
         const snap = await _fbDb.ref(FB_PATH).get();
         if (!snap.exists()) return;
         const fbStocks = Object.values(snap.val());
-        // 기존 stocks에서 manual_ 제거 후 Firebase 것으로 교체
         stocks = stocks.filter(s => !s.id || !s.id.startsWith('manual_'));
         stocks = stocks.concat(fbStocks);
         saveToStorage();
         updateAll();
-        console.log(`Firebase에서 수동 종목 ${fbStocks.length}개 로드 완료`);
+        showToast(`☁️ 수동 종목 ${fbStocks.length}개 불러옴`, 'info');
       } catch(e) {
         console.warn('Firebase 로드 실패:', e);
+        showToast('⚠️ 서버에서 종목 불러오기 실패 — 로컬 데이터 사용 중', 'warn');
       }
     }
 
