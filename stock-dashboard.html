@@ -618,7 +618,7 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
   </div>
 
   <script>
-    const ACCOUNTS = [
+    let ACCOUNTS = [
       { id: 1, name: '일반 계좌 1', num: '70714', acctNum: '70714*****-01', type: 'general', desc: '미국주식 + 한국주식' },
       { id: 2, name: '일반 계좌 2', num: '70871', acctNum: '70871*****-01', type: 'general', desc: '미국주식 + 한국주식' },
       { id: 3, name: 'ISA',         num: '71297', acctNum: '71297*****-14', type: 'isa',     desc: 'ISA 계좌' },
@@ -627,6 +627,75 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
       { id: 6, name: '연금저축 2',  num: '71615', acctNum: '71615*****-15', type: 'pension', desc: '연금저축' },
       { id: 7, name: '연금저축 3',  num: '70868', acctNum: '70868*****-15', type: 'pension', desc: '연금저축' }
     ];
+
+    function _mergeKakaoAccounts() {
+      const kakaoAccs = window.KAKAO_PARSED_DATA && window.KAKAO_PARSED_DATA.accounts;
+      if (!kakaoAccs) return;
+      kakaoAccs.forEach(ka => {
+        const exists = ACCOUNTS.find(a => a.num === ka.num && a.type === ka.type);
+        if (!exists) {
+          ACCOUNTS.push({ id: ka.id, name: ka.name, num: ka.num,
+            acctNum: ka.num + '*****', type: ka.type, desc: '자동 등록' });
+        }
+      });
+    }
+    _mergeKakaoAccounts();
+
+    async function _applyFirebaseAccountOverrides() {
+      try {
+        const snap = await _fbDb.ref('stock_dashboard/accounts').get();
+        if (!snap.exists()) return;
+        Object.values(snap.val()).forEach(ov => {
+          const acc = ACCOUNTS.find(a => a.id === ov.id);
+          if (acc) { acc.type = ov.type; acc.name = ov.name; }
+          else ACCOUNTS.push({ id: ov.id, name: ov.name, num: ov.num,
+            acctNum: ov.num + '*****', type: ov.type, desc: '자동 등록' });
+        });
+        updateAll();
+      } catch(e) { console.warn('Firebase 계좌 오버라이드 로드 실패:', e); }
+    }
+
+    function _nextAccName(type) {
+      const n = ACCOUNTS.filter(a => a.type === type).length + 1;
+      return {general:`일반계좌${n}`, isa:`ISA${n}`, irp:`IRP${n}`, pension:`연금저축${n}`}[type] || `${type}${n}`;
+    }
+
+    function openAccountTypeModal(accountId) {
+      const acc = ACCOUNTS.find(a => a.id === accountId);
+      if (!acc) return;
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:10000;display:flex;align-items:center;justify-content:center';
+      overlay.innerHTML = `
+        <div style="background:#fff;border-radius:16px;padding:24px;width:300px;box-shadow:0 8px 32px rgba(0,0,0,.2)">
+          <p style="font-size:15px;font-weight:600;margin-bottom:4px">계좌 유형 변경</p>
+          <p style="font-size:12px;color:#888;margin-bottom:16px">${acc.name} (${acc.num}*****)</p>
+          <select id="_accTypeSelect" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;margin-bottom:16px">
+            <option value="general" ${acc.type==='general'?'selected':''}>일반계좌</option>
+            <option value="isa"     ${acc.type==='isa'    ?'selected':''}>ISA</option>
+            <option value="irp"     ${acc.type==='irp'    ?'selected':''}>IRP (퇴직연금)</option>
+            <option value="pension" ${acc.type==='pension'?'selected':''}>연금저축</option>
+          </select>
+          <div style="display:flex;gap:8px">
+            <button onclick="this.closest('div[style]').parentElement.remove()"
+              style="flex:1;padding:8px;border:1px solid #ddd;border-radius:8px;font-size:13px;cursor:pointer">취소</button>
+            <button onclick="_saveAccountType(${accountId},document.getElementById('_accTypeSelect').value,this.closest('div[style]').parentElement)"
+              style="flex:1;padding:8px;background:#2D6CDF;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">저장</button>
+          </div>
+        </div>`;
+      document.body.appendChild(overlay);
+    }
+
+    function _saveAccountType(accountId, newType, overlay) {
+      const acc = ACCOUNTS.find(a => a.id === accountId);
+      if (!acc || acc.type === newType) { overlay.remove(); return; }
+      acc.type = newType;
+      acc.name = _nextAccName(newType);
+      overlay.remove();
+      _fbDb.ref('stock_dashboard/accounts/' + accountId).set({ id: acc.id, num: acc.num, type: acc.type, name: acc.name })
+        .then(() => showToast(`✅ ${acc.name}으로 변경됨`, 'success'))
+        .catch(() => showToast('⚠️ Firebase 저장 실패 — 로컬에만 반영됨', 'error'));
+      updateAll();
+    }
 
     // 기본 계좌 데이터 (2026.06.19 12:50 기준 - stock_all_20260619_1250.csv)
     const DEFAULT_STOCKS = [
