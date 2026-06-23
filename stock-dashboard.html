@@ -71,7 +71,7 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
   <main class="max-w-7xl w-full mx-auto px-6 py-6 flex-grow">
     <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
       <div>
-        <h1 class="text-xl font-bold">주식 포트폴리오 대시보드 <span class="text-sm font-normal text-gray-400">v1.1</span></h1>
+        <h1 class="text-xl font-bold">주식 포트폴리오 대시보드 <span class="text-sm font-normal text-gray-400">v1.2</span></h1>
         <p id="statusText" class="text-sm text-gray-500 mt-1">2026.06.18 기준</p>
         <p id="nextRefreshText" class="text-xs text-gray-400 mt-0.5">다음 갱신: 계산 중...</p>
       </div>
@@ -857,7 +857,7 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
 
     let accountPieChart = null, stockPieChart = null, pnlChart = null, divChart = null, stockDivChart = null, accDivChart = null;
     let activeDividends = [];
-    const APP_VERSION = 'v1.1';
+    const APP_VERSION = 'v1.2';
     const STORAGE_KEY = 'stock_dashboard_v3';
 
     // 다음 자동갱신 시각 계산 (kakao_watcher.py 스케줄과 동일 로직)
