@@ -929,6 +929,16 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
           document.getElementById('statusText').textContent = `${d} ${t} 기준 (자동업데이트)`;
           _updateNextRefresh();
           setInterval(_updateNextRefresh, 60000); // 1분마다 갱신
+          // 새 데이터 수신 시 자동 스냅샷 저장 (추이 차트 데이터 누적)
+          const pushDate = kdPushedAt.slice(0, 10);
+          const pushTime = kdPushedAt.slice(11, 16);
+          if (!snapshots.some(s => s.date === pushDate && s.type === '자동')) {
+            const totalEval = stocks.reduce((s, x) => s + (x.evalAmount || 0), 0);
+            const totalInvested = stocks.reduce((s, x) => s + (x.buyAmount || 0), 0);
+            const totalDiv = (dividends || []).reduce((s, dv) => s + (dv.netAmount || 0), 0);
+            snapshots.push({ date: pushDate, time: pushTime, type: '자동', totalEval, totalInvested, totalDiv });
+            snapshots.sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+          }
         }
       } else {
         const raw = localStorage.getItem(STORAGE_KEY);
@@ -1728,7 +1738,17 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
     function renderHeatmap() {
       const container = document.getElementById('heatmapContainer');
       if (!container) return;
-      const active = stocks.filter(s => (s.evalAmount || 0) > 0);
+
+      // 종목명 기준으로 합산 (여러 계좌에 같은 종목이 있으면 합산)
+      const map = {};
+      stocks.filter(s => (s.evalAmount || 0) > 0).forEach(s => {
+        if (!map[s.name]) map[s.name] = { name: s.name, evalAmount: 0, buyAmount: 0, accs: [] };
+        map[s.name].evalAmount += s.evalAmount || 0;
+        map[s.name].buyAmount  += s.buyAmount  || 0;
+        const acc = ACCOUNTS.find(a => a.id === s.accountId);
+        if (acc) map[s.name].accs.push(acc.name);
+      });
+      const active = Object.values(map);
       if (!active.length) { container.innerHTML = '<p class="text-gray-400 text-sm">데이터 없음</p>'; return; }
       const totalEval = active.reduce((s, x) => s + x.evalAmount, 0);
 
@@ -1743,17 +1763,17 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
         }
       }
 
-      const sorted = [...active].sort((a, b) => (b.evalAmount || 0) - (a.evalAmount || 0));
+      const sorted = [...active].sort((a, b) => b.evalAmount - a.evalAmount);
       container.innerHTML = sorted.map(s => {
         const pct = totalEval > 0 ? s.evalAmount / totalEval * 100 : 0;
-        const profit = (s.evalAmount || 0) - (s.buyAmount || 0);
-        const profitPct = (s.buyAmount || 0) > 0 ? profit / s.buyAmount * 100 : 0;
+        const profit = s.evalAmount - s.buyAmount;
+        const profitPct = s.buyAmount > 0 ? profit / s.buyAmount * 100 : 0;
         const color = heatColor(profitPct);
         const h = pct > 10 ? 90 : pct > 5 ? 70 : pct > 2 ? 56 : 44;
         const sign = profitPct >= 0 ? '+' : '';
-        const acc = ACCOUNTS.find(a => a.id === s.accountId);
+        const accNames = [...new Set(s.accs)].join(', ');
         return `<div onclick="switchTab('portfolio')"
-          title="${s.name}\n평가: ₩${(s.evalAmount||0).toLocaleString()}\n수익률: ${sign}${profitPct.toFixed(2)}%\n손익: ${sign}₩${Math.abs(profit).toLocaleString()}\n계좌: ${acc?.name||''}"
+          title="${s.name}\n평가: ₩${s.evalAmount.toLocaleString()}\n수익률: ${sign}${profitPct.toFixed(2)}%\n손익: ${sign}₩${Math.abs(profit).toLocaleString()}\n계좌: ${accNames}"
           style="flex:0 0 calc(${Math.max(pct,1.2)}% - 4px);min-width:52px;height:${h}px;background:${color};border-radius:5px;padding:4px 5px;color:white;font-size:10px;cursor:pointer;overflow:hidden;box-sizing:border-box;transition:opacity .15s;" onmouseover="this.style.opacity='.8'" onmouseout="this.style.opacity='1'">
           <div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.3;">${s.name}</div>
           <div style="font-size:11px;font-weight:700;">${sign}${profitPct.toFixed(1)}%</div>
@@ -2494,7 +2514,7 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
       document.getElementById('tradeTotalCount').textContent = `${tradeList.length}건`;
 
       // 거래 내역 렌더링 (최신순)
-      const sorted = [...tradeList].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+      const sorted = [...tradeList].sort((a, b) => ((b.date||'')+(b.time||'')).localeCompare((a.date||'')+(a.time||'')));
       document.getElementById('tradeTableBody').innerHTML = sorted.length
         ? sorted.map(t => {
             const acc = ACCOUNTS.find(a => a.id === t.accountId);

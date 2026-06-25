@@ -309,6 +309,13 @@ def parse_datetime(line):
         if ap == '오후' and h != 12: h += 12
         elif ap == '오전' and h == 12: h = 0
         return f"{y}-{mo:02d}-{d:02d}", f"{h:02d}:{mi:02d}"
+    # 카카오 메시지 포맷: 날짜는 별도 줄, 시간만 있는 줄 "[오후 2:30]" 처리
+    tm = re.search(r'(오전|오후)\s+(\d+):(\d+)', line)
+    if tm:
+        ap, h, mi = tm.group(1), int(tm.group(2)), int(tm.group(3))
+        if ap == '오후' and h != 12: h += 12
+        elif ap == '오전' and h == 12: h = 0
+        return parse_date(line), f"{h:02d}:{mi:02d}"
     return parse_date(line), None
 
 # ═══════════════════════════════════════════════════════════
@@ -458,7 +465,7 @@ def parse_kakao(filepath):
                         (t_date == TRADE_DATE_CUT and t_time >= TRADE_TIME_CUT)
                 trades.append({'accountId': account['id'], 'stockName': sname,
                                'type': t_type, 'qty': qty, 'price': price,
-                               'date': t_date, 'total': qty*price,
+                               'date': t_date, 'time': t_time, 'total': qty*price,
                                'applyToPortfolio': apply})
 
         # ── 해외 매수/매도 (헤더 기반 전진 파싱) ──────────────────
@@ -494,7 +501,7 @@ def parse_kakao(filepath):
                              (t_date2 == TRADE_DATE_CUT and t_time2 >= TRADE_TIME_CUT)
                     trades.append({'accountId': account['id'], 'stockName': sname,
                                    'type': t_type2, 'qty': qty2, 'price': krw_price,
-                                   'date': t_date2, 'total': qty2*krw_price, 'isOverseas': True,
+                                   'date': t_date2, 'time': t_time2, 'total': qty2*krw_price, 'isOverseas': True,
                                    'applyToPortfolio': apply2})
 
         # ── IRP/퇴직연금 ETF 국내 체결 ───────────────────────────
@@ -528,7 +535,7 @@ def parse_kakao(filepath):
                                         (t_date_irp == TRADE_DATE_CUT and t_time_irp >= TRADE_TIME_CUT)
                             trades.append({'accountId': account_irp['id'], 'stockName': sname_irp,
                                            'type': t_type_irp, 'qty': qty_irp, 'price': price_irp,
-                                           'date': t_date_irp, 'total': qty_irp * price_irp,
+                                           'date': t_date_irp, 'time': t_time_irp, 'total': qty_irp * price_irp,
                                            'applyToPortfolio': apply_irp})
 
         # ── 입금 ──────────────────────────────────────────
