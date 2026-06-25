@@ -570,6 +570,17 @@ def parse_kakao(filepath):
 # ═══════════════════════════════════════════════════════════
 #  HTML 주입
 # ═══════════════════════════════════════════════════════════
+def _extract_existing_data():
+    """현재 HTML에 주입된 기존 KAKAO_PARSED_DATA 추출"""
+    try:
+        html = Path(DASHBOARD_HTML).read_text(encoding='utf-8')
+        m = re.search(r'window\.KAKAO_PARSED_DATA=(\{.*?\});</script>', html, re.DOTALL)
+        if m:
+            return json.loads(m.group(1))
+    except Exception:
+        pass
+    return None
+
 def inject_to_html(data):
     html = Path(DASHBOARD_HTML).read_text(encoding='utf-8')
 
@@ -741,6 +752,18 @@ def process_file(filepath):
             data = parse_kakao(filepath)
             data['exchangeRate'] = EXCHANGE_RATE  # 성공 시 갱신, 실패 시 이전 성공값 유지
             data.setdefault('fireTarget', FIRE_TARGET)  # 웹 UI 미변경 시 기본값 유지
+
+            # 방어 로직: 새 파일 배당이 기존보다 적으면 기존 배당·입금 보존
+            existing = _extract_existing_data()
+            if existing:
+                ex_div = existing.get('dividends', [])
+                ex_dep = existing.get('deposits', [])
+                new_div = data.get('dividends', [])
+                if len(new_div) < len(ex_div) * 0.8:  # 기존 80% 미만이면 보존
+                    log.info(f"  🛡️ 배당 보존: 새 {len(new_div)}건 < 기존 {len(ex_div)}건 → 기존 유지")
+                    data['dividends'] = ex_div
+                if len(data.get('deposits', [])) == 0 and ex_dep:
+                    data['deposits'] = ex_dep
             log.info("  현재가 조회 중...")
             data['prices'] = fetch_prices()
             inject_to_html(data)
