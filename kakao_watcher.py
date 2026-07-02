@@ -28,7 +28,7 @@ log = _setup_logger()
 # ═══════════════════════════════════════════════════════════
 #  설정 — 본인 환경에 맞게 수정
 # ═══════════════════════════════════════════════════════════
-GDRIVE_FOLDER  = r"G:\내 드라이브\KakaoTalk"                  # Google Drive 가상 드라이브
+GDRIVE_FOLDER  = r"C:\Users\82102\Downloads"                 # 카카오톡 PC 내보내기 기본 저장 폴더
 REPO_PATH      = r"D:\AI\260619_2_Daily_for_stock_TEMP"     # Git 저장소 경로
 DASHBOARD_HTML = os.path.join(REPO_PATH, "stock-dashboard.html")
 TICKER_MAP_FILE= os.path.join(REPO_PATH, "ticker_map.json")
