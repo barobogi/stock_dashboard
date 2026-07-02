@@ -935,7 +935,7 @@ input:focus, select:focus { outline: 2px solid #5B8DEE; outline-offset: -1px; bo
           if (!snapshots.some(s => s.date === pushDate && s.type === '자동')) {
             const totalEval = stocks.reduce((s, x) => s + (x.evalAmount || 0), 0);
             const totalInvested = stocks.reduce((s, x) => s + (x.buyAmount || 0), 0);
-            const totalDiv = (dividends || []).reduce((s, dv) => s + (dv.netAmount || 0), 0);
+            const totalDiv = (dividends || []).reduce((s, dv) => s + (dv.netAmount || dv.amount || 0), 0);
             snapshots.push({ date: pushDate, time: pushTime, type: '자동', totalEval, totalInvested, totalDiv });
             snapshots.sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
           }
