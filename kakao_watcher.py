@@ -23,6 +23,12 @@ def _setup_logger():
         logger.addHandler(ch)
     return logger
 
+import sys
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+if hasattr(sys.stderr, 'reconfigure'):
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+
 log = _setup_logger()
 
 # ═══════════════════════════════════════════════════════════
