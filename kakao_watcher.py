@@ -601,6 +601,21 @@ def inject_to_html(data):
     Path(DASHBOARD_HTML).write_text(html, encoding='utf-8')
     log.info("  HTML 주입 완료")
 
+    # 새 통합 대시보드 파일에도 주입
+    new_dashboard_path = r"D:\AI\⑤_자동화_Daily_for_Barobogi\stock-dashboard.html"
+    if os.path.exists(new_dashboard_path):
+        try:
+            new_html = Path(new_dashboard_path).read_text(encoding='utf-8')
+            new_html = re.sub(
+                r'\n\s*<!-- KAKAO_AUTO:START -->.*?<!-- KAKAO_AUTO:END -->',
+                '', new_html, flags=re.DOTALL
+            )
+            new_html = new_html.replace('</head>', block + '\n</head>', 1)
+            Path(new_dashboard_path).write_text(new_html, encoding='utf-8')
+            log.info("  새 통합 HTML 주입 완료")
+        except Exception as e:
+            log.error(f"  새 통합 HTML 주입 오류: {e}")
+
 # ═══════════════════════════════════════════════════════════
 #  GitHub push
 # ═══════════════════════════════════════════════════════════
