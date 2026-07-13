@@ -608,7 +608,7 @@ def inject_to_html(data):
     log.info("  HTML 주입 완료")
 
     # 새 통합 대시보드 파일에도 주입
-    new_dashboard_path = r"D:\AI\⑤_자동화_Daily_for_Barobogi\stock-dashboard.html"
+    new_dashboard_path = r"D:\AI\Daily_for_Barobogi\stock-dashboard.html"
     if os.path.exists(new_dashboard_path):
         try:
             new_html = Path(new_dashboard_path).read_text(encoding='utf-8')
