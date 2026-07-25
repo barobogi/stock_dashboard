@@ -7,6 +7,17 @@ from pathlib import Path
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
+# 중복 실행 방지 락 (2026-07-26) — OS 레벨 파일 락이라 프로세스가 죽거나 kill되면 자동 해제됨.
+# 같은 스크립트가 이미 실행 중이면 여기서 즉시 종료 — Task Scheduler/수동 재시작이 겹쳐도 좀비 중복이 안 생김.
+import msvcrt
+_lock_path = Path(r"D:\AI\260619_2_Daily_for_stock_TEMP\.kakao_watcher.lock")
+_lock_file = open(_lock_path, "w")
+try:
+    msvcrt.locking(_lock_file.fileno(), msvcrt.LK_NBLCK, 1)
+except OSError:
+    print("[kakao_watcher] 이미 다른 인스턴스가 실행 중 — 즉시 종료")
+    sys.exit(0)
+
 _processing_lock = threading.Lock()
 
 # ── 로거 설정 (파일 + 콘솔 동시 출력) ──────────────────────────
